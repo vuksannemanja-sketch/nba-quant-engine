@@ -1219,6 +1219,42 @@ if st.sidebar.button("🔄 Refresh ALL CSV now"):
             st.sidebar.write(f"- {sname}: {err}")
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("---")
+st.sidebar.subheader("📅 Danas | Auto-ponuda")
+_today_str = __import__('datetime').date.today().strftime("%Y-%m-%d")
+_offer_path = os.path.join(DATA_DIR, "todays_offer.txt")
+_games_path = os.path.join(DATA_DIR, "todays_games.json")
+_offer_date = None
+if os.path.exists(_games_path):
+    try:
+        import json as _json
+        _gdata = _json.loads(open(_games_path).read())
+        _offer_date = _gdata.get("date","")
+        _games_today = _gdata.get("games",[])
+        if _offer_date == _today_str and _games_today:
+            st.sidebar.success(f"📅 {_today_str} | {len(_games_today)} meceva")
+            for _g in _games_today:
+                _tot = f" (total: {_g['total']})" if _g.get('total') else ""
+                st.sidebar.caption(f"🏀 {_g.get('away','?')} @ {_g.get('home','?')}{_tot}")
+        else:
+            st.sidebar.info(f"Posljednji fetch: {_offer_date or 'N/A'}")
+    except Exception:
+        pass
+if st.sidebar.button("📅 Fetch meceva za danas", use_container_width=True):
+    with st.spinner("Povlacim meceve..."):
+        try:
+            import subprocess as _sp, sys as _sys
+            _fetch_py = os.path.join(os.getcwd(), "fetch_todays_games.py")
+            if os.path.exists(_fetch_py):
+                _sp.check_call([_sys.executable, _fetch_py])
+                st.cache_data.clear()
+                st.sidebar.success("Mecevi osvjezeni!")
+                st.rerun()
+            else:
+                st.sidebar.error("fetch_todays_games.py nije pronadjen")
+        except Exception as _e:
+            st.sidebar.error(f"Greska: {_e}")
+
 st.sidebar.markdown("### 📦 Data status")
 st.sidebar.write(f"Players main: {'✅' if PLAYER_MAIN_CSV else '❌'} → {os.path.basename(PLAYER_MAIN_CSV) if PLAYER_MAIN_CSV else 'None'}")
 st.sidebar.write(f"Players base: {'✅' if PLAYER_BASE_CSV else '❌'} → {os.path.basename(PLAYER_BASE_CSV) if PLAYER_BASE_CSV else 'None'}")
@@ -1266,10 +1302,37 @@ second_model_uploaded = st.file_uploader(
 )
 
 if not uploaded:
-    st.info("Uploaduj TXT/CSV ponudu da startuje analiza.")
-    st.stop()
-
-txt = smart_decode(uploaded.getvalue())
+    # Pokusaj automatski ucitati danasnju ponudu
+    _auto_offer_path = os.path.join(DATA_DIR, "todays_offer.txt")
+    _today_check = __import__('datetime').date.today().strftime("%Y-%m-%d")
+    _games_json = os.path.join(DATA_DIR, "todays_games.json")
+    _has_fresh = False
+    if os.path.exists(_games_json):
+        try:
+            import json as _j2
+            _gd = _j2.loads(open(_games_json).read())
+            _has_fresh = _gd.get("date","") == _today_check and bool(_gd.get("games",[]))
+        except Exception:
+            pass
+    if _has_fresh and os.path.exists(_auto_offer_path):
+        try:
+            with open(_auto_offer_path, "r", encoding="utf-8") as _f:
+                _auto_txt = _f.read()
+            if _auto_txt.strip() and not _auto_txt.strip().startswith("# Nema"):
+                st.info(f"📅 Auto-ucitana danasnja ponuda ({_today_check}). Mozete uploadovati svoju za override.")
+                uploaded_txt = _auto_txt
+            else:
+                st.info("Uploaduj TXT/CSV ponudu ili klikni 'Fetch meceva za danas' u sidebaru.")
+                st.stop()
+        except Exception:
+            st.info("Uploaduj TXT/CSV ponudu da startuje analiza.")
+            st.stop()
+    else:
+        st.info("Uploaduj TXT/CSV ponudu ili klikni '📅 Fetch meceva za danas' u sidebaru.")
+        st.stop()
+else:
+    uploaded_txt = smart_decode(uploaded.getvalue())
+txt = uploaded_txt
 rows, bad_lines = parse_offer_text(txt)
 st.caption(f"Parsed rows: {len(rows)} | Skipped lines: {len(bad_lines)}")
 with st.expander("🧾 Debug parsed rows"):
