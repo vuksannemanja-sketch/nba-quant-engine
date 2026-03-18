@@ -1320,15 +1320,15 @@ if not uploaded:
                 _auto_txt = _f.read()
             if _auto_txt.strip() and not _auto_txt.strip().startswith("# Nema"):
                 st.info(f"📅 Auto-ucitana danasnja ponuda ({_today_check}). Mozete uploadovati svoju za override.")
-                uploaded_txt = _auto_txt
+                uploaded_txt = _auto_txt; _n_data = len([l for l in _auto_txt.splitlines() if l.strip() and not l.strip().startswith("#")]); st.caption(f"Auto-ponuda: {_n_data} igraca")
             else:
-                st.info("Uploaduj TXT/CSV ponudu ili klikni 'Fetch meceva za danas' u sidebaru.")
+                st.info("Nema svjeze ponude za danas. Klikni '📥 Dohvati meceva za danas' u sidebaru.")
                 st.stop()
         except Exception:
             st.info("Uploaduj TXT/CSV ponudu da startuje analiza.")
             st.stop()
     else:
-        st.info("Uploaduj TXT/CSV ponudu ili klikni '📅 Fetch meceva za danas' u sidebaru.")
+        st.info("Nema svjeze ponude. Klikni '📅 Fetch meceva za danas' u sidebaru.")
         st.stop()
 else:
     uploaded_txt = smart_decode(uploaded.getvalue())
@@ -1342,7 +1342,7 @@ with st.expander("🧾 Debug parsed rows"):
         st.dataframe(pd.DataFrame(bad_lines, columns=["raw", "reason"]), use_container_width=True)
 
 if len(rows) == 0:
-    st.error("Nema validnih redova u fajlu.")
+    st.error("Nema validnih redova u ponudi. Provjeri format fajla (ocekivano: Ime,linija,over,under,opp) ili osvjezi podatke.")
     st.stop()
 
 results, not_found = [], []
@@ -1418,7 +1418,7 @@ for (name, line_val, over_odds, under_odds, opp_from_txt, total_from_txt) in row
 
 df = pd.DataFrame(results)
 if df.empty:
-    st.error("Nijedan igrač nije matchovan u sezonskoj bazi.")
+    st.error("0 igraca matchovano — CSV nije ucitan ili skracenice timova se ne poklapaju. Pokrenite 'Osvjezi podatke' pa 'Dohvati meceva za danas'.Nijedan igrač nije matchovan u sezonskoj bazi.")
     if not_found:
         st.dataframe(pd.DataFrame(not_found), use_container_width=True)
     st.stop()
