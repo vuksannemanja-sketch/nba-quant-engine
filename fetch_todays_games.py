@@ -1,4 +1,4 @@
-import os, json, datetime, urllib.request, subprocess, sys
+import os, json, datetime, urllib.request, subprocess, sys, ssl
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -38,7 +38,8 @@ HDR = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 def hget(url, t=15):
         try:
                     req = urllib.request.Request(url, headers=HDR)
-                    with urllib.request.urlopen(req, timeout=t) as r:
+                    ctx = ssl._create_unverified_context()
+                with urllib.request.urlopen(req, timeout=t, context=ctx) as r:
                                     return json.loads(r.read().decode())
         except Exception as e:
                     print(f"[fetch] {url}: {e}")
