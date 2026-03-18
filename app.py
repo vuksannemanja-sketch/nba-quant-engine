@@ -1418,7 +1418,7 @@ for (name, line_val, over_odds, under_odds, opp_from_txt, total_from_txt) in row
 
 df = pd.DataFrame(results)
 if df.empty:
-            st.error("0 igraca matchovano u sezonskoj bazi. Provjeri: (1) da li CSV postoji u data/ folderu, (2) da li skracenice timova odgovaraju. Pokrenite 'Osvjezi podatke' pa 'Dohvati meceva za danas'.")
+    st.error("0 igraca matchovano u sezonskoj bazi. Provjeri: (1) da li CSV postoji u data/ folderu, (2) da li skracenice timova odgovaraju. Pokrenite 'Osvjezi podatke' pa 'Dohvati meceva za danas'.")
     if not_found:
         st.dataframe(pd.DataFrame(not_found), use_container_width=True)
     st.stop()
