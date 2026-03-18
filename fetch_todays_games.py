@@ -7,7 +7,7 @@ SEASON = "2025-26"
 
 TEAM_MAP = {
         "ATL": "ATL", "BOS": "BOS", "BKN": "BKN", "CHA": "CHA", "CHI": "CHI",
-        "CLE": "CLE", "DAL": "DAL", "DEN": "DEN", "DET": "DET", "GSW": "GSW",
+        "CLE": "CLE", "DAL": "DAL, "DEN": "DEN", "DET": "DET", "GSW": "GSW",
         "HOU": "HOU", "IND": "IND", "LAC": "LAC", "LAL": "LAL", "MEM": "MEM",
         "MIA": "MIA", "MIL": "MIL", "MIN": "MIN", "NOP": "NOP", "NYK": "NYK",
         "ORL": "ORL", "PHI": "PHI", "PHX": "PHX", "POR": "POR", "SAC": "SAC",
@@ -175,6 +175,7 @@ elif cu == "MIN":
 elif cu == "PTS":
                 cm[c] = "PTS"
         df = df.rename(columns=cm)
+        df = df.loc[:, ~df.columns.duplicated()]
 
         if "TEAM_ABBR" not in df.columns:
                         print(f"[fetch_todays_games] players_for: nema TEAM_ABBR u {fn}")
