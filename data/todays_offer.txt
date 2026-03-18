@@ -1,0 +1,32 @@
+# NBA ponuda 2026-03-18 | Golden State Warriors@Boston Celtics, Oklahoma City Thunder@Brooklyn Nets, Portland Trail Blazers@Indiana Pacers
+Gui Santos,13.5,1.85,1.88,Golden State Warriors@Boston Celtics
+Draymond Green,8.5,2.24,1.61,Golden State Warriors@Boston Celtics
+Kristaps Porzingis,16.5,1.83,1.91,Golden State Warriors@Boston Celtics
+Jaylen Brown,24.5,1.9,1.84,Golden State Warriors@Boston Celtics
+Sam Hauser,8.5,1.83,1.91,Golden State Warriors@Boston Celtics
+Jayson Tatum,21.5,1.94,1.8,Golden State Warriors@Boston Celtics
+Neemias Queta,8.5,1.77,1.98,Golden State Warriors@Boston Celtics
+Derrick White,15.5,1.84,1.9,Golden State Warriors@Boston Celtics
+Gary Payton II,9.5,1.97,1.78,Golden State Warriors@Boston Celtics
+Payton Pritchard,15.5,2.12,1.67,Golden State Warriors@Boston Celtics
+De'Anthony Melton,14.5,1.9,1.84,Golden State Warriors@Boston Celtics
+Brandin Podziemski,13.5,2.0,1.76,Golden State Warriors@Boston Celtics
+Shai Gilgeous-Alexander,27.5,1.85,1.89,Oklahoma City Thunder@Brooklyn Nets
+Nicolas Claxton,9.5,2.11,1.68,Oklahoma City Thunder@Brooklyn Nets
+Ajay Mitchell,14.5,1.97,1.78,Oklahoma City Thunder@Brooklyn Nets
+Chet Holmgren,14.5,1.68,2.1,Oklahoma City Thunder@Brooklyn Nets
+Noah Clowney,9.5,1.76,1.99,Oklahoma City Thunder@Brooklyn Nets
+Danny Wolf,10.5,1.94,1.8,Oklahoma City Thunder@Brooklyn Nets
+Cason Wallace,8.5,2.01,1.75,Oklahoma City Thunder@Brooklyn Nets
+Nolan Traore,8.5,1.98,1.77,Oklahoma City Thunder@Brooklyn Nets
+Jaylin Williams,11.5,2.12,1.67,Oklahoma City Thunder@Brooklyn Nets
+Isaiah Joe,9.5,1.79,1.95,Oklahoma City Thunder@Brooklyn Nets
+Ziaire Williams,8.5,1.75,2.0,Oklahoma City Thunder@Brooklyn Nets
+Ivica Zubac,12.5,2.04,1.72,Portland Trail Blazers@Indiana Pacers
+Scoot Henderson,14.5,1.92,1.82,Portland Trail Blazers@Indiana Pacers
+Jrue Holiday,14.5,1.76,1.99,Portland Trail Blazers@Indiana Pacers
+Jerami Grant,17.5,1.84,1.9,Portland Trail Blazers@Indiana Pacers
+Toumani Camara,12.5,1.93,1.82,Portland Trail Blazers@Indiana Pacers
+Deni Avdija,22.5,1.78,1.97,Portland Trail Blazers@Indiana Pacers
+Aaron Nesmith,13.5,1.87,1.87,Portland Trail Blazers@Indiana Pacers
+Kobe Brown,8.5,1.8,1.94,Portland Trail Blazers@Indiana Pacers

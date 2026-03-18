@@ -1,0 +1,20 @@
+{
+  "date": "2026-03-18",
+  "games": [
+    {
+      "home": "Boston Celtics",
+      "away": "Golden State Warriors",
+      "event_id": "559e3b7523e4be26e5788e58c1e6067b"
+    },
+    {
+      "home": "Brooklyn Nets",
+      "away": "Oklahoma City Thunder",
+      "event_id": "b8069101e24852c60cabdc606432eee7"
+    },
+    {
+      "home": "Indiana Pacers",
+      "away": "Portland Trail Blazers",
+      "event_id": "ad16cbe50231fbc2c6e23cc24db31365"
+    }
+  ]
+}
