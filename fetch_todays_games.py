@@ -10,7 +10,7 @@ ODDS_API_KEY = "cb0541c83972398497ab1e9add4fe94f"
 ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 
 # NBA bookmaker priority: bet365 first, then others as fallback
-BOOKMAKER_PRIORITY = ["bet365", "draftkings", "fanduel", "betmgm", "pointsbet", "williamhill_us"]
+BOOKMAKER_PRIORITY = ["pinnacle", "bet365", "fanduel", "draftkings", "betmgm", "betrivers", "betonlineag", "bovada"]
 
 HDR = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 
