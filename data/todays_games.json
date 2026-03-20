@@ -1,15 +1,4 @@
 {
-  "date": "2026-03-19",
-  "games": [
-    {
-      "home": "Washington Wizards",
-      "away": "Detroit Pistons",
-      "event_id": "570e79a6a678168c3cb3e69098069448"
-    },
-    {
-      "home": "Charlotte Hornets",
-      "away": "Orlando Magic",
-      "event_id": "ec3ff082cb50037d2f7bb5258b1e2d41"
-    }
-  ]
+  "date": "2026-03-20",
+  "games": []
 }
