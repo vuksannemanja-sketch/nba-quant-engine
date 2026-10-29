@@ -1,6 +1,19 @@
+# Python
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
 venv/
-.DS_Store
+*.egg-info/
+
+# Tajne i lokalna podešavanja
+.env
+
+# Rezultati analiza (svaki dan novi fajlovi) — čuvaju se lokalno
+history/
+
+# Uređivači / sistem
 *.py.save
+.DS_Store
+.vscode/
+.idea/

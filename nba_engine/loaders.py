@@ -296,11 +296,12 @@ def fill_injury_teams(inj_df: Optional[pd.DataFrame], players_df: pd.DataFrame) 
         df["TEAM_ABBR"] = np.nan
     lookup = (players_df.dropna(subset=["TEAM_ABBR"])
               .drop_duplicates("NAME_KEY").set_index("NAME_KEY")["TEAM_ABBR"])
-    missing = df["TEAM_ABBR"].isna() | (df["TEAM_ABBR"].astype(str).str.strip() == "")
-    filled = df.loc[missing, "NAME_KEY"].map(lookup)
+    current = df["TEAM_ABBR"].astype(object)
+    missing = current.isna() | (current.astype(str).str.strip() == "")
+    filled = df["NAME_KEY"].map(lookup).where(missing)
     n = int(filled.notna().sum())
     if n:
-        df.loc[missing, "TEAM_ABBR"] = filled
+        df["TEAM_ABBR"] = current.where(filled.isna(), filled)
     return df, n
 
 

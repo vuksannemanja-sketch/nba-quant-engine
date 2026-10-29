@@ -1,16 +1,19 @@
 name: Fetch NBA Offer
 
+# Svaki dan povlači dnevnu ponudu (player points) sa The Odds API i upisuje je u data/offer_latest.csv.
+# Ključ se čita iz GitHub Secrets (Settings → Secrets and variables → Actions → ODDS_API_KEY).
+# Bez postavljenog ključa korak se preskače i robot ništa ne mijenja.
+
 on:
   schedule:
-    # 19:00 CET = 18:00 UTC (zimsko racunanje)
-    # 19:00 CEST = 17:00 UTC (ljetno racunanje - mart-oktobar)
+    # 19:00 CET = 18:00 UTC (zimsko računanje); 19:00 CEST = 17:00 UTC (ljetno računanje)
     - cron: '0 17 * * *'
   workflow_dispatch:
     inputs:
       reason:
-        description: 'Razlog rucnog pokretanja'
+        description: 'Razlog ručnog pokretanja'
         required: false
-        default: 'Manuelno osvjezavanje ponude'
+        default: 'Ručno osvježavanje ponude'
 
 jobs:
   fetch-offer:
@@ -28,16 +31,22 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install requests pandas
+        run: pip install pandas numpy requests
 
-      - name: Run fetch_todays_games.py
-        run: python fetch_todays_games.py
+      - name: Fetch today's offer
+        if: ${{ secrets.ODDS_API_KEY != '' }}
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: python -m nba_engine fetch-offer
+
+      - name: Skip (no API key configured)
+        if: ${{ secrets.ODDS_API_KEY == '' }}
+        run: echo "ODDS_API_KEY secret nije postavljen - preskačem."
 
       - name: Commit and push offer file
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/todays_offer.txt data/todays_games.json
-          git diff --cached --quiet || git commit -m "auto: fetch NBA offer $(date '+%Y-%m-%d %H:%M CET')"
+          git add data/offer_latest.csv data/dnevna_ponuda.csv data/offer_*.csv 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "auto: fetch NBA offer $(date '+%Y-%m-%d %H:%M') UTC"
           git push

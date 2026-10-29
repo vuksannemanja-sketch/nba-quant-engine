@@ -66,6 +66,8 @@ class OddsApiClient:
             raise
         except Exception:
             return None
+        if not isinstance(data, dict):
+            return None
         for bookie in data.get("bookmakers", []):
             for market in bookie.get("markets", []):
                 if market.get("key") == "totals":
