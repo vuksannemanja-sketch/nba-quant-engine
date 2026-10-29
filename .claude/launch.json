@@ -3,8 +3,19 @@
   "configurations": [
     {
       "name": "nba-engine-ui",
-      "runtimeExecutable": ".venv/bin/python",
-      "runtimeArgs": ["-m", "streamlit", "run", "app.py", "--server.port", "8511", "--server.headless", "true"],
+      "runtimeExecutable": "/Users/dajanavuksan/dev/nba-engine/.venv/bin/python",
+      "runtimeArgs": [
+        "-m",
+        "streamlit",
+        "run",
+        "/Users/dajanavuksan/dev/nba-engine/app.py",
+        "--server.port",
+        "8511",
+        "--server.headless",
+        "true",
+        "--browser.gatherUsageStats",
+        "false"
+      ],
       "port": 8511
     }
   ]

@@ -225,6 +225,13 @@ players_df, teams_df = bundle.players, bundle.teams
 for _note in bundle.notes:
     st.sidebar.caption("ℹ️ " + _note)
 
+_inj_path = settings.csv_path("injuries")
+if _inj_path is not None:
+    _inj_age_h = (datetime.datetime.now() - datetime.datetime.fromtimestamp(_inj_path.stat().st_mtime)).total_seconds() / 3600
+    if _inj_age_h > 48:
+        st.warning(f"⚠️ Tabela ozljeda ({_inj_path.name}) je stara {_inj_age_h / 24:.0f} dana — statusi OUT/QUESTIONABLE "
+                   "vjerovatno više ne važe. Pokreni osvježavanje (korak „Ozljede“) ili koristi ručni Injury Override.")
+
 injury_override_df: Optional[pd.DataFrame] = None
 if injury_override_txt and injury_override_txt.strip():
     injury_override_df = parse_injury_override(injury_override_txt, players_df)
@@ -380,6 +387,15 @@ with st.expander("🔎 Debug players not found"):
         st.dataframe(pd.DataFrame(result.not_found), **WIDE_DF)
     else:
         st.write("All players matched ✅")
+
+_inj_used = result.injuries_used
+if _inj_used is not None and not _inj_used.empty and "NAME_KEY" in _inj_used.columns:
+    _offer_keys = {normalize_name(r.name) for r in result.offer_rows}
+    _flagged = _inj_used[_inj_used["NAME_KEY"].isin(_offer_keys)]
+    if not _flagged.empty:
+        with st.expander(f"🏥 Igrači iz ponude na injury listi ({len(_flagged)}) — provjeri prije uplate"):
+            _cols = [c for c in ("PLAYER", "TEAM_ABBR", "STATUS", "DESCRIPTION") if c in _flagged.columns]
+            st.dataframe(_flagged[_cols].reset_index(drop=True), **WIDE_DF)
 
 st.caption(f"Bookmaker offset: **{result.bm_offset:.2f}**")
 df = result.df

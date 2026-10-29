@@ -106,6 +106,19 @@ def cmd_analyze(args) -> int:
             _print_df(pd.DataFrame(result.not_found))
         return 1
 
+    inj_path = settings.csv_path("injuries")
+    if inj_path is not None:
+        age_h = (_dt.datetime.now() - _dt.datetime.fromtimestamp(inj_path.stat().st_mtime)).total_seconds() / 3600
+        if age_h > 48:
+            print(f"⚠️  Tabela ozljeda je stara {age_h / 24:.0f} dana — pokreni: python -m nba_engine refresh --steps injuries")
+    inj_used = result.injuries_used
+    if inj_used is not None and not inj_used.empty and "NAME_KEY" in inj_used.columns:
+        from .utils import normalize_name
+        offer_keys = {normalize_name(r.name) for r in result.offer_rows}
+        flagged = inj_used[inj_used["NAME_KEY"].isin(offer_keys)]
+        if not flagged.empty:
+            print(f"🏥 Igrači iz ponude na injury listi ({len(flagged)}): " + ", ".join(
+                f"{r['PLAYER']} ({r['STATUS']})" for _, r in flagged.head(12).iterrows()) + (" ..." if len(flagged) > 12 else ""))
     print(f"Bookmaker offset: {result.bm_offset:.2f} | pickova nakon filtera: {len(result.df)}")
     if result.concentration.teams:
         print("⚠️ Koncentracija OVER pickova:", ", ".join(
