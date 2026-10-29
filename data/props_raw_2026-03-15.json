@@ -1,0 +1,579 @@
+[
+  {
+    "event_id": "689cb75979724773a16b617332228d55",
+    "data": {
+      "id": "689cb75979724773a16b617332228d55",
+      "sport_key": "basketball_nba",
+      "sport_title": "NBA",
+      "commence_time": "2026-03-15T17:12:00Z",
+      "home_team": "Oklahoma City Thunder",
+      "away_team": "Minnesota Timberwolves"
+    },
+    "props": {
+      "Ajay Mitchell": {
+        "line": 13.5,
+        "over_odds": 1.71,
+        "under_odds": 2.21,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      },
+      "Anthony Edwards": {
+        "line": 26.5,
+        "over_odds": 1.99,
+        "under_odds": 1.87,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      },
+      "Chet Holmgren": {
+        "line": 16.5,
+        "over_odds": 2.05,
+        "under_odds": 1.81,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      },
+      "Donte DiVincenzo": {
+        "line": 10.5,
+        "over_odds": 1.85,
+        "under_odds": 2.01,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      },
+      "Isaiah Hartenstein": {
+        "line": 8.5,
+        "over_odds": 2.01,
+        "under_odds": 1.85,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      },
+      "Isaiah Joe": {
+        "line": 6.5,
+        "over_odds": 1.79,
+        "under_odds": 2.09,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      },
+      "Jaden McDaniels": {
+        "line": 12.5,
+        "over_odds": 1.91,
+        "under_odds": 1.94,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      },
+      "Julius Randle": {
+        "line": 16.5,
+        "over_odds": 1.88,
+        "under_odds": 1.97,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      },
+      "Luguentz Dort": {
+        "line": 8.5,
+        "over_odds": 2.14,
+        "under_odds": 1.75,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      },
+      "Naz Reid": {
+        "line": 11.5,
+        "over_odds": 1.84,
+        "under_odds": 2.02,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      },
+      "Rudy Gobert": {
+        "line": 9.5,
+        "over_odds": 1.88,
+        "under_odds": 1.97,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      },
+      "Shai Gilgeous-Alexander": {
+        "line": 32.5,
+        "over_odds": 1.99,
+        "under_odds": 1.87,
+        "bookmaker": "pinnacle",
+        "home_team": "OKC",
+        "away_team": "MIN"
+      }
+    }
+  },
+  {
+    "event_id": "45f9fc1bf871b54d2392e9ec6506097f",
+    "data": {
+      "id": "45f9fc1bf871b54d2392e9ec6506097f",
+      "sport_key": "basketball_nba",
+      "sport_title": "NBA",
+      "commence_time": "2026-03-15T19:40:00Z",
+      "home_team": "Cleveland Cavaliers",
+      "away_team": "Dallas Mavericks"
+    },
+    "props": {
+      "Evan Mobley": {
+        "line": 20.5,
+        "over_odds": 2.25,
+        "under_odds": 1.86,
+        "bookmaker": "pinnacle",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "Brandon Williams": {
+        "line": 12.5,
+        "over_odds": 1.89,
+        "under_odds": 1.94,
+        "bookmaker": "betonlineag",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "Naji Marshall": {
+        "line": 14.5,
+        "over_odds": 1.88,
+        "under_odds": 1.9,
+        "bookmaker": "betonlineag",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "Max Christie": {
+        "line": 11.5,
+        "over_odds": 1.94,
+        "under_odds": 1.86,
+        "bookmaker": "betonlineag",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "Keon Ellis": {
+        "line": 10.5,
+        "over_odds": 2.01,
+        "under_odds": 1.91,
+        "bookmaker": "pinnacle",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "Khris Middleton": {
+        "line": 9.5,
+        "over_odds": 1.87,
+        "under_odds": 1.91,
+        "bookmaker": "pinnacle",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "Donovan Mitchell": {
+        "line": 26.5,
+        "over_odds": 1.93,
+        "under_odds": 1.88,
+        "bookmaker": "pinnacle",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "James Harden": {
+        "line": 20.5,
+        "over_odds": 1.88,
+        "under_odds": 1.88,
+        "bookmaker": "betonlineag",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "Cooper Flagg": {
+        "line": 20.5,
+        "over_odds": 1.88,
+        "under_odds": 1.88,
+        "bookmaker": "betonlineag",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "P.J. Washington": {
+        "line": 11.5,
+        "over_odds": 1.94,
+        "under_odds": 1.97,
+        "bookmaker": "betonlineag",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "Dennis Schroder": {
+        "line": 10.5,
+        "over_odds": 2.14,
+        "under_odds": 1.88,
+        "bookmaker": "pinnacle",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "Dean Wade": {
+        "line": 6.5,
+        "over_odds": 2.03,
+        "under_odds": 1.75,
+        "bookmaker": "betonlineag",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "Ryan Nembhard": {
+        "line": 7.5,
+        "over_odds": 1.94,
+        "under_odds": 1.82,
+        "bookmaker": "betonlineag",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      },
+      "Marvin Bagley III": {
+        "line": 10.5,
+        "over_odds": 2.06,
+        "under_odds": 1.71,
+        "bookmaker": "pinnacle",
+        "home_team": "CLE",
+        "away_team": "DAL"
+      }
+    }
+  },
+  {
+    "event_id": "ee20dd8148c700589a380b7f5b5c1010",
+    "data": {
+      "id": "ee20dd8148c700589a380b7f5b5c1010",
+      "sport_key": "basketball_nba",
+      "sport_title": "NBA",
+      "commence_time": "2026-03-15T19:40:00Z",
+      "home_team": "Toronto Raptors",
+      "away_team": "Detroit Pistons"
+    },
+    "props": {
+      "Tobias Harris": {
+        "line": 12.5,
+        "over_odds": 1.93,
+        "under_odds": 1.86,
+        "bookmaker": "pinnacle",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Jakob Poeltl": {
+        "line": 9.5,
+        "over_odds": 1.9,
+        "under_odds": 1.92,
+        "bookmaker": "pinnacle",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Jalen Duren": {
+        "line": 18.5,
+        "over_odds": 2.1,
+        "under_odds": 2.0,
+        "bookmaker": "betonlineag",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Ron Holland": {
+        "line": 7.5,
+        "over_odds": 1.84,
+        "under_odds": 1.92,
+        "bookmaker": "betonlineag",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "R.J. Barrett": {
+        "line": 19.5,
+        "over_odds": 1.96,
+        "under_odds": 1.85,
+        "bookmaker": "pinnacle",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Duncan Robinson": {
+        "line": 10.5,
+        "over_odds": 1.93,
+        "under_odds": 1.88,
+        "bookmaker": "pinnacle",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Sandro Mamukelashvili": {
+        "line": 7.5,
+        "over_odds": 1.8,
+        "under_odds": 1.99,
+        "bookmaker": "pinnacle",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Scottie Barnes": {
+        "line": 15.5,
+        "over_odds": 1.95,
+        "under_odds": 2.15,
+        "bookmaker": "betonlineag",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Ja'Kobe Walter": {
+        "line": 6.5,
+        "over_odds": 1.98,
+        "under_odds": 1.79,
+        "bookmaker": "betonlineag",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Caris LeVert": {
+        "line": 6.5,
+        "over_odds": 2.06,
+        "under_odds": 1.73,
+        "bookmaker": "betonlineag",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Cade Cunningham": {
+        "line": 24.5,
+        "over_odds": 1.97,
+        "under_odds": 2.0,
+        "bookmaker": "betonlineag",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Jamal Shead": {
+        "line": 6.5,
+        "over_odds": 2.0,
+        "under_odds": 1.77,
+        "bookmaker": "betonlineag",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Brandon Ingram": {
+        "line": 20.5,
+        "over_odds": 1.85,
+        "under_odds": 1.97,
+        "bookmaker": "betonlineag",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Immanuel Quickley": {
+        "line": 15.5,
+        "over_odds": 1.93,
+        "under_odds": 1.99,
+        "bookmaker": "betonlineag",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Paul Reed Jr": {
+        "line": 7.5,
+        "over_odds": 1.98,
+        "under_odds": 1.78,
+        "bookmaker": "betonlineag",
+        "home_team": "TOR",
+        "away_team": "DET"
+      },
+      "Ausar Thompson": {
+        "line": 8.5,
+        "over_odds": 1.81,
+        "under_odds": 1.96,
+        "bookmaker": "betonlineag",
+        "home_team": "TOR",
+        "away_team": "DET"
+      }
+    }
+  },
+  {
+    "event_id": "4d87f60750a28b81c5a82803e3b412a7",
+    "data": {
+      "id": "4d87f60750a28b81c5a82803e3b412a7",
+      "sport_key": "basketball_nba",
+      "sport_title": "NBA",
+      "commence_time": "2026-03-15T19:40:00Z",
+      "home_team": "Milwaukee Bucks",
+      "away_team": "Indiana Pacers"
+    },
+    "props": {
+      "Aaron Nesmith": {
+        "line": 14.5,
+        "over_odds": 1.87,
+        "under_odds": 2.13,
+        "bookmaker": "betonlineag",
+        "home_team": "MIL",
+        "away_team": "IND"
+      },
+      "Myles Turner": {
+        "line": 9.5,
+        "over_odds": 1.94,
+        "under_odds": 1.84,
+        "bookmaker": "betonlineag",
+        "home_team": "MIL",
+        "away_team": "IND"
+      },
+      "Ivica Zubac": {
+        "line": 11.5,
+        "over_odds": 1.97,
+        "under_odds": 2.03,
+        "bookmaker": "betonlineag",
+        "home_team": "MIL",
+        "away_team": "IND"
+      },
+      "Ryan Rollins": {
+        "line": 17.5,
+        "over_odds": 1.94,
+        "under_odds": 1.84,
+        "bookmaker": "pinnacle",
+        "home_team": "MIL",
+        "away_team": "IND"
+      },
+      "Kyle Kuzma": {
+        "line": 12.5,
+        "over_odds": 1.88,
+        "under_odds": 1.88,
+        "bookmaker": "betonlineag",
+        "home_team": "MIL",
+        "away_team": "IND"
+      },
+      "Giannis Antetokounmpo": {
+        "line": 29.5,
+        "over_odds": 1.88,
+        "under_odds": 1.93,
+        "bookmaker": "betonlineag",
+        "home_team": "MIL",
+        "away_team": "IND"
+      },
+      "Jarace Walker": {
+        "line": 16.5,
+        "over_odds": 1.94,
+        "under_odds": 1.84,
+        "bookmaker": "betonlineag",
+        "home_team": "MIL",
+        "away_team": "IND"
+      },
+      "A.J. Green": {
+        "line": 9.5,
+        "over_odds": 1.98,
+        "under_odds": 1.79,
+        "bookmaker": "betonlineag",
+        "home_team": "MIL",
+        "away_team": "IND"
+      },
+      "Bobby Portis": {
+        "line": 12.5,
+        "over_odds": 2.34,
+        "under_odds": 1.77,
+        "bookmaker": "pinnacle",
+        "home_team": "MIL",
+        "away_team": "IND"
+      },
+      "Cam Thomas": {
+        "line": 9.5,
+        "over_odds": 1.89,
+        "under_odds": 1.87,
+        "bookmaker": "betonlineag",
+        "home_team": "MIL",
+        "away_team": "IND"
+      },
+      "Kobe Brown": {
+        "line": 9.5,
+        "over_odds": 2.4,
+        "under_odds": 1.53,
+        "bookmaker": "pinnacle",
+        "home_team": "MIL",
+        "away_team": "IND"
+      }
+    }
+  },
+  {
+    "event_id": "6420f72c1e96bb40f11548af8dbb2950",
+    "data": {
+      "id": "6420f72c1e96bb40f11548af8dbb2950",
+      "sport_key": "basketball_nba",
+      "sport_title": "NBA",
+      "commence_time": "2026-03-15T22:10:00Z",
+      "home_team": "Philadelphia 76ers",
+      "away_team": "Portland Trail Blazers"
+    },
+    "props": {
+      "Jerami Grant": {
+        "line": 17.5,
+        "over_odds": 1.86,
+        "under_odds": 1.9,
+        "bookmaker": "betonlineag",
+        "home_team": "PHI",
+        "away_team": "POR"
+      },
+      "Scoot Henderson": {
+        "line": 13.5,
+        "over_odds": 1.86,
+        "under_odds": 1.97,
+        "bookmaker": "pinnacle",
+        "home_team": "PHI",
+        "away_team": "POR"
+      },
+      "Jrue Holiday": {
+        "line": 16.5,
+        "over_odds": 1.85,
+        "under_odds": 1.93,
+        "bookmaker": "betonlineag",
+        "home_team": "PHI",
+        "away_team": "POR"
+      },
+      "Donovan Clingan": {
+        "line": 13.5,
+        "over_odds": 1.85,
+        "under_odds": 1.98,
+        "bookmaker": "betonlineag",
+        "home_team": "PHI",
+        "away_team": "POR"
+      },
+      "VJ Edgecombe": {
+        "line": 18.5,
+        "over_odds": 1.92,
+        "under_odds": 1.97,
+        "bookmaker": "betonlineag",
+        "home_team": "PHI",
+        "away_team": "POR"
+      },
+      "Quentin Grimes": {
+        "line": 19.5,
+        "over_odds": 1.85,
+        "under_odds": 1.91,
+        "bookmaker": "betonlineag",
+        "home_team": "PHI",
+        "away_team": "POR"
+      },
+      "Dominick Barlow": {
+        "line": 10.5,
+        "over_odds": 1.79,
+        "under_odds": 2.0,
+        "bookmaker": "betonlineag",
+        "home_team": "PHI",
+        "away_team": "POR"
+      },
+      "Deni Avdija": {
+        "line": 22.5,
+        "over_odds": 1.88,
+        "under_odds": 1.97,
+        "bookmaker": "pinnacle",
+        "home_team": "PHI",
+        "away_team": "POR"
+      },
+      "Justin Edwards": {
+        "line": 11.5,
+        "over_odds": 1.95,
+        "under_odds": 2.02,
+        "bookmaker": "betonlineag",
+        "home_team": "PHI",
+        "away_team": "POR"
+      },
+      "Toumani Camara": {
+        "line": 12.5,
+        "over_odds": 1.92,
+        "under_odds": 1.88,
+        "bookmaker": "pinnacle",
+        "home_team": "PHI",
+        "away_team": "POR"
+      },
+      "Adem Bona": {
+        "line": 8.5,
+        "over_odds": 1.95,
+        "under_odds": 1.79,
+        "bookmaker": "pinnacle",
+        "home_team": "PHI",
+        "away_team": "POR"
+      }
+    }
+  }
+]
