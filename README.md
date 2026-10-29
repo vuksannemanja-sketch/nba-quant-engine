@@ -61,8 +61,10 @@ Ako neki neobavezni fajl nedostaje, model radi bez te komponente (vidi „DEBUG 
 ## Sezona i podešavanja
 
 Redoslijed: argument komande → `.env` (`NBA_SEASON`) → najnovija sezona za koju postoje fajlovi u `data/` →
-sezona po današnjem datumu (od oktobra nova). Na početku nove sezone: upiši `NBA_SEASON=2026-27` u `.env`
-i pokreni `python -m nba_engine refresh`.
+sezona po današnjem datumu (od oktobra nova). Na početku nove sezone dovoljno je jednom pokrenuti
+`python -m nba_engine refresh --season 2026-27 --with-h2h`: kad se pojave fajlovi `*_2026-27.csv`, aplikacija
+sama bira najnoviju sezonu u `data/`. Stari fajlovi (`*_2025-26.csv`) ostaju i ne smetaju; `NBA_SEASON` u `.env`
+treba samo ako želiš nasilno drugu sezonu.
 
 `.env` promjenljive: `ODDS_API_KEY`, `NBA_SEASON`, `NBA_DATA_DIR`, `NBA_HISTORY_DIR`, `ODDS_BOOKMAKERS` (vidi `.env.example`).
 Fajl `.env` se ne šalje na GitHub.
