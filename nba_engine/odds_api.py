@@ -20,6 +20,7 @@ from .teams import VALID_ABBRS, normalize_team_abbr, team_name_to_abbr
 from .utils import normalize_name
 
 OFFER_COLUMNS = ["PLAYER", "PLAYER_TEAM", "LINE", "OVER_ODDS", "UNDER_ODDS", "OPP_TEAM", "TOTAL_MATCH"]
+OFFER_DETAIL_COLUMNS = OFFER_COLUMNS + ["BOOKMAKER", "OVER_BOOK", "UNDER_BOOK", "N_BOOKS", "N_BOOKS_SAME_LINE"]
 SPORT_KEY = "basketball_nba"
 
 Logger = Callable[[str], None]
@@ -168,15 +169,19 @@ def order_bookmakers(bookmakers: List[dict], priority: Sequence[str]) -> List[di
 
 def extract_player_props(data: dict, home_abbr: str, away_abbr: str, total_match: Optional[float],
                          players_df: Optional[pd.DataFrame], priority: Sequence[str] = (),
-                         log: Optional[Logger] = None) -> List[dict]:
-    """Iz odgovora za jedan meč napravi redove ponude. Uzima se prva kladionica (po prioritetu)
-    koja ima player_points tržište; po igraču se uzima prvi par Over/Under."""
+                         log: Optional[Logger] = None, best_odds: bool = True) -> List[dict]:
+    """Iz odgovora za jedan meč napravi redove ponude.
+
+    Linija igrača dolazi od kladionice najvišeg prioriteta koja ga nudi. Kvote: uz ``best_odds`` najbolja Over
+    i najbolja Under među kladionicama koje nude ISTU liniju (druga linija se ne miješa), inače kvote te iste
+    kladionice. Svaki red nosi i detalje (BOOKMAKER, OVER_BOOK, UNDER_BOOK, N_BOOKS, N_BOOKS_SAME_LINE).
+    """
     bookmakers = data.get("bookmakers", []) if isinstance(data, dict) else []
     if not bookmakers:
         return []
-    props: List[dict] = []
-    seen = set()
+    quotes: Dict[str, List[dict]] = {}
     for bookie in order_bookmakers(bookmakers, priority):
+        bkey = str(bookie.get("key", ""))
         for market in bookie.get("markets", []):
             if market.get("key") != "player_points":
                 continue
@@ -186,44 +191,59 @@ def extract_player_props(data: dict, home_abbr: str, away_abbr: str, total_match
                 if player:
                     players.setdefault(player, {})[o.get("name")] = o
             for player, sides in players.items():
-                if player in seen:
-                    continue
                 over, under = sides.get("Over"), sides.get("Under")
                 if not over or not under:
                     continue
-                seen.add(player)
-                player_team = find_player_team(player, players_df)
-                opp_team = None
-                if player_team:
-                    if player_team == (home_abbr or "").upper():
-                        opp_team = away_abbr
-                    elif player_team == (away_abbr or "").upper():
-                        opp_team = home_abbr
-                    elif log:
-                        log(f"    ⚠️ {player}: tim {player_team} ne odgovara meču {away_abbr}@{home_abbr}")
-                elif log:
-                    log(f"    ⚠️ {player}: nije pronađen u bazi igrača")
-                props.append({
-                    "PLAYER": player,
-                    "PLAYER_TEAM": player_team or "",
-                    "LINE": over.get("point"),
-                    "OVER_ODDS": over.get("price"),
-                    "UNDER_ODDS": under.get("price"),
-                    "OPP_TEAM": opp_team or "",
-                    "TOTAL_MATCH": total_match if total_match else "",
-                    "BOOKMAKER": bookie.get("key", ""),
-                })
-        if props:
-            break
+                try:
+                    line, p_over, p_under = float(over.get("point")), float(over.get("price")), float(under.get("price"))
+                except (TypeError, ValueError):
+                    continue
+                if any(q["book"] == bkey for q in quotes.get(player, [])):
+                    continue
+                quotes.setdefault(player, []).append({"book": bkey, "line": line, "over": p_over, "under": p_under})
+
+    props: List[dict] = []
+    for player, qs in quotes.items():
+        primary = qs[0]
+        same_line = [q for q in qs if q["line"] == primary["line"]]
+        best_over = max(same_line, key=lambda q: q["over"]) if best_odds else primary
+        best_under = max(same_line, key=lambda q: q["under"]) if best_odds else primary
+        player_team = find_player_team(player, players_df)
+        opp_team = None
+        if player_team:
+            if player_team == (home_abbr or "").upper():
+                opp_team = away_abbr
+            elif player_team == (away_abbr or "").upper():
+                opp_team = home_abbr
+            elif log:
+                log(f"    ⚠️ {player}: tim {player_team} ne odgovara meču {away_abbr}@{home_abbr}")
+        elif log:
+            log(f"    ⚠️ {player}: nije pronađen u bazi igrača")
+        props.append({
+            "PLAYER": player,
+            "PLAYER_TEAM": player_team or "",
+            "LINE": primary["line"],
+            "OVER_ODDS": best_over["over"],
+            "UNDER_ODDS": best_under["under"],
+            "OPP_TEAM": opp_team or "",
+            "TOTAL_MATCH": total_match if total_match else "",
+            "BOOKMAKER": primary["book"],
+            "OVER_BOOK": best_over["book"],
+            "UNDER_BOOK": best_under["book"],
+            "N_BOOKS": len(qs),
+            "N_BOOKS_SAME_LINE": len(same_line),
+        })
     return props
 
 
-def props_to_frame(all_props: List[dict]) -> pd.DataFrame:
+def props_to_frame(all_props: List[dict], detail: bool = False) -> pd.DataFrame:
+    """7-kolonska ponuda (format koji čita parser) ili ista sa detaljima o kladionicama (``detail``)."""
     df = pd.DataFrame(all_props)
     if df.empty:
         return df
     df = df.sort_values("LINE", ascending=False)
-    return df[[c for c in OFFER_COLUMNS if c in df.columns]]
+    cols = OFFER_DETAIL_COLUMNS if detail else OFFER_COLUMNS
+    return df[[c for c in cols if c in df.columns]]
 
 
 # ---------------------------------------------------------------------------
@@ -240,8 +260,14 @@ class FetchResult:
 
 
 def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optional[pd.DataFrame] = None,
-                      client: Optional[OddsApiClient] = None, today: Optional[_dt.date] = None) -> FetchResult:
-    """Povuci današnju ponudu i snimi je u ``offer_latest.csv`` (+ kopije ``dnevna_ponuda.csv`` i datirana)."""
+                      client: Optional[OddsApiClient] = None, today: Optional[_dt.date] = None,
+                      best_odds: bool = True, closing: bool = False) -> FetchResult:
+    """Povuci današnju ponudu i snimi je u ``offer_latest.csv`` (+ kopije ``dnevna_ponuda.csv`` i datirana)
+    i detalje po kladionici u ``offer_books_<datum>.csv``.
+
+    ``best_odds``: najbolja kvota među kladionicama sa istom linijom. ``closing``: snimak zatvorenih linija
+    (pred početak mečeva) ide SAMO u ``closing_<datum>.csv`` (za CLV u evaluaciji); ponuda se ne dira.
+    """
     client = client or OddsApiClient(settings.odds_api_key, settings.odds_api_base)
     try:
         if players_df is None:
@@ -264,7 +290,7 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
             total_match = client.fetch_game_totals(event_id)
             data = client.fetch_event_player_points(event_id)
             props = extract_player_props(data, home_abbr, away_abbr, total_match, players_df,
-                                         settings.bookmaker_priority, log=log)
+                                         settings.bookmaker_priority, log=log, best_odds=best_odds)
             log(f"🏀 {away_abbr} @ {home_abbr}: total={total_match}, igrača={len(props)}")
             all_props.extend(props)
 
@@ -272,15 +298,27 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
             return FetchResult(False, pd.DataFrame(), "Nema player props ponude.", events=len(events))
 
         df = props_to_frame(all_props)
+        df_detail = props_to_frame(all_props, detail=True)
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         today_iso = (today or _dt.date.today()).isoformat()
-        paths = [settings.offer_latest_path(),
-                 settings.data_dir / "dnevna_ponuda.csv",
-                 settings.data_dir / f"offer_{today_iso}.csv"]
-        for p in paths:
-            df.to_csv(p, index=False)
+        if closing:
+            paths = [settings.data_dir / f"closing_{today_iso}.csv"]
+            df_detail.to_csv(paths[0], index=False)
+        else:
+            paths = [settings.offer_latest_path(),
+                     settings.data_dir / "dnevna_ponuda.csv",
+                     settings.data_dir / f"offer_{today_iso}.csv"]
+            for p in paths:
+                df.to_csv(p, index=False)
+            detail_path = settings.data_dir / f"offer_books_{today_iso}.csv"
+            df_detail.to_csv(detail_path, index=False)
+            paths.append(detail_path)
         opp_filled = int((df["OPP_TEAM"].astype(str) != "").sum())
         msg = f"OK: {len(df)} props, OPP_TEAM popunjen {opp_filled}/{len(df)}"
+        if "N_BOOKS" in df_detail.columns and len(df_detail):
+            msg += f", kladionica po igraču prosj. {float(df_detail['N_BOOKS'].mean()):.1f}"
+        if closing:
+            msg += " (zatvorene linije za CLV)"
         if client.last_remaining is not None:
             msg += f", preostalo API zahtjeva: {client.last_remaining}"
         log("✅ " + msg)
