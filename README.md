@@ -36,6 +36,7 @@ python -m nba_engine ui
 
 Korisne opcije: `analyze --offer PUTANJA --top 20 --min-ev 5 --only-positive --no-schedule`,
 `refresh --steps players,injuries` (samo odabrani koraci), `--season 2026-27`, `--data-dir /drugi/folder`.
+`settle` poravnava snimljene analize sa stvarnim poenima (vidi „Automatska evaluacija“).
 Svaka komanda ima `--help`.
 
 ## Šta treba od podataka
@@ -68,6 +69,27 @@ treba samo ako želiš nasilno drugu sezonu.
 
 `.env` promjenljive: `ODDS_API_KEY`, `NBA_SEASON`, `NBA_DATA_DIR`, `NBA_HISTORY_DIR`, `ODDS_BOOKMAKERS` (vidi `.env.example`).
 Fajl `.env` se ne šalje na GitHub.
+
+## Automatska evaluacija (da li model pogađa)
+
+Svaka analiza ponude za današnje mečeve se snima u `history/analysis_<datum>_<vrijeme>.csv`. Sutradan (ili bilo kad
+kasnije) pokreni:
+
+```bash
+python -m nba_engine settle
+```
+
+Komanda povuče stvarne poene iz NBA game loga (isti izvor kao forma i H2H), poravna svaku još neporavnatu analizu
+i upiše:
+
+- `history/settled_<ime analize>.csv`: svaki pick sa stvarnim poenima, ishodom (WIN / LOSS / PUSH / VOID) i profitom;
+- `history/ledger.csv`: jedan red po analizi (pogodak %, profit, ROI, MAE, ocjena A–F) i zbir preko svega.
+
+Pravila: računa se samo OVER/UNDER (NO VALUE nije opklada); igrač koji nije igrao = VOID; analiza snimljena prije
+06:00 pripada prethodnom (američkom) danu; meč se traži po protivniku iz analize (±1 dan). Isto radi dugme
+„🔄 Poravnaj nove analize“ u aplikaciji, gdje se vidi i zbirna ocjena. `settle --report` samo ispisuje stanje, bez mreže.
+
+Preporuka: dvije do tri sedmice samo snimati i poravnavati, bez uplata, pa tek onda zaključivati o modelu.
 
 ## Šta se računa automatski i koje zaštite postoje
 
