@@ -4,6 +4,7 @@ Komande:
   ui           pokreni Streamlit aplikaciju
   analyze      pokreni dnevnu analizu nad ponudom i ispiši najbolje pickove
   fetch-offer  povuci današnju ponudu sa The Odds API u data/offer_latest.csv
+  settle       poravnaj snimljene analize sa stvarnim poenima (automatska evaluacija)
   refresh      osvježi CSV podatke (NBA Stats, ESPN, The Odds API)
   check        provjeri podešavanja, podatke i zavisnosti
 """
@@ -175,6 +176,32 @@ def cmd_refresh(args) -> int:
     return 0 if report.ok else 1
 
 
+def cmd_settle(args) -> int:
+    from .settle import load_all_settled, load_ledger, overall_summary, settle_history
+    settings = _settings_from_args(args)
+    hist = Path(getattr(args, "history_dir", None) or settings.history_dir)
+    if not args.report:
+        print(f"📒 Poravnanje analiza iz {hist} sa stvarnim poenima (NBA Stats game log)...")
+        events = settle_history(hist, stake=args.stake, force=args.force, log=print)
+        n = {k: sum(1 for e in events if e["status"] == k) for k in ("settled", "pending", "no_data", "error")}
+        print(f"Poravnato: {n['settled']} | čeka mečeve: {n['pending']} | game log još nema datum: {n['no_data']} | greške: {n['error']}")
+        for e in events:
+            if e["status"] in ("pending", "error"):
+                print(f"  · {e['Analysis']}: {e['detail']}")
+    ledger = load_ledger(hist)
+    if ledger.empty:
+        print("Ledger je prazan — još nema poravnatih analiza (snimaju se samo analize ponude za današnje mečeve).")
+        return 0
+    cols = ["Game Date", "Analysis", "Picks", "Settled", "Wins", "Losses", "Pushes", "Void", "Accuracy %",
+            "Profit", "ROI %", "MAE", "Grade"]
+    print("\n📊 Po analizi:")
+    _print_df(ledger.sort_values("Game Date")[cols].tail(args.last))
+    o = overall_summary(load_all_settled(hist), stake=args.stake)
+    print(f"\n🏁 Ukupno ({o['Days']} analiza): {o['Bets']} opklada, {o['Wins']}-{o['Losses']}-{o['Pushes']} (void {o['Void']}) | "
+          f"pogodak {o['Accuracy %']} % | profit {o['Profit']:+.2f} | ROI {o['ROI %']:+.2f} % | MAE {o['MAE']} | ocjena {o['Grade']}")
+    return 0
+
+
 def cmd_ui(args) -> int:
     app_path = PROJECT_ROOT / "app.py"
     cmd = [sys.executable, "-m", "streamlit", "run", str(app_path), "--server.port", str(args.port)]
@@ -238,6 +265,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("check", parents=[common], help="provjeri podešavanja i podatke")
     s.set_defaults(func=cmd_check)
+
+    s = sub.add_parser("settle", parents=[common],
+                       help="poravnaj snimljene analize sa stvarnim poenima (automatska evaluacija)")
+    s.add_argument("--stake", type=float, default=1.0, help="ulog po opkladi za profit/ROI (podrazumijevano 1)")
+    s.add_argument("--force", action="store_true", help="ponovo poravnaj i već poravnate analize")
+    s.add_argument("--report", action="store_true", help="samo ispiši ledger i zbir, bez mreže")
+    s.add_argument("--last", type=int, default=20, help="koliko zadnjih analiza ispisati")
+    s.add_argument("--history-dir", help="folder istorije (podrazumijevano: history/)")
+    s.set_defaults(func=cmd_settle)
     return p
 
 

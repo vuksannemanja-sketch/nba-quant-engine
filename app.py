@@ -23,6 +23,7 @@ from nba_engine.offer import (offer_rows_to_frame, parse_injury_override, parse_
 from nba_engine.pipeline import MC_SIMS_CHOICES, AnalysisOptions, format_auto_context, run_analysis
 from nba_engine.refresh import ALL_STEPS, DEFAULT_STEPS, STEP_LABELS, run_refresh
 from nba_engine.schedule import STATE_ICON, fetch_schedule_context, games_for_date
+from nba_engine.settle import load_all_settled, load_ledger, overall_summary, settle_history
 from nba_engine.utils import normalize_name, smart_decode
 
 
@@ -495,6 +496,55 @@ if actual_results_df is not None and second_model_uploaded is not None:
         st.dataframe(compare_df, **WIDE_DF)
     except Exception as e:  # noqa: BLE001
         st.error(f"Greška u compare modulu: {e}")
+
+
+# =====================================================
+# Automatska evaluacija: snimljene analize vs stvarni poeni
+# =====================================================
+
+st.markdown("---")
+st.subheader("📈 Automatska evaluacija — sve snimljene analize")
+st.caption("Svaka snimljena analiza se poslije odigranih mečeva poravnava sa stvarnim poenima iz NBA game loga. "
+           "Računa se samo OVER/UNDER; igrač koji nije igrao = VOID. Profit je u jedinicama uloga (1 po opkladi). "
+           "Ovo je jedini pravi pokazatelj koliko model vrijedi.")
+_sc1, _sc2 = st.columns([1, 3])
+if _sc1.button("🔄 Poravnaj nove analize", help="Povlači game log sa NBA Stats (10–20 s) i poravnava sve još neporavnate analize"):
+    with st.spinner("Povlačim stvarne rezultate i poravnavam..."):
+        _msgs: list = []
+        try:
+            _events = settle_history(settings.history_dir, stake=1.0, log=_msgs.append)
+            _n = {k: sum(1 for e in _events if e["status"] == k) for k in ("settled", "pending", "no_data", "error")}
+            _sc2.success(f"Poravnato: {_n['settled']} | čeka mečeve: {_n['pending']} | game log još nema datum: {_n['no_data']} | greške: {_n['error']}")
+            for _m in _msgs:
+                st.caption(_m)
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Poravnanje nije uspjelo: {e}")
+_ledger = load_ledger(settings.history_dir)
+if _ledger.empty:
+    _sc2.info("Još nema poravnatih analiza. Analize se snimaju u history/ samo kad je ponuda za današnje mečeve; "
+              "sutradan klikni „Poravnaj nove analize“ ili pokreni: python -m nba_engine settle")
+else:
+    _o = overall_summary(load_all_settled(settings.history_dir), stake=1.0)
+    _m1, _m2, _m3, _m4, _m5, _m6 = st.columns(6)
+    _m1.metric("Opklada", _o["Bets"])
+    _m2.metric("Pogodak", f"{_o['Accuracy %']}%")
+    _m3.metric("ROI", f"{_o['ROI %']}%")
+    _m4.metric("Profit", f"{_o['Profit']:+.2f}")
+    _m5.metric("MAE", _o["MAE"] if _o["MAE"] is not None else "-")
+    _m6.metric("Ocjena", _o["Grade"])
+    st.caption(f"{_o['Days']} analiza | {_o['Wins']}-{_o['Losses']}-{_o['Pushes']} | void {_o['Void']} | "
+               "ocjena po istim pragovima kao ručna evaluacija (A–F)")
+    st.dataframe(_ledger.sort_values("Game Date", ascending=False), **WIDE_DF)
+    with st.expander("Detalji po pick-u (zadnja poravnata analiza)"):
+        _last_name = str(_ledger.sort_values("Game Date").iloc[-1]["Analysis"])
+        _last_path = settings.history_dir / f"settled_{_last_name}"
+        if _last_path.exists():
+            _sd = pd.read_csv(_last_path)
+            _scols = [c for c in ("Player", "TEAM_ABBR", "OPP_TEAM", "Model Pick", "Line", "Final Projection",
+                                  "Actual Points", "Actual Opp", "Bet Result", "Used Odds", "Profit", "Abs Error") if c in _sd.columns]
+            st.dataframe(_sd[_scols], **WIDE_DF)
+        else:
+            st.write("Fajl sa detaljima nije pronađen.")
 
 
 # =====================================================
