@@ -16,18 +16,25 @@ from nba_engine.pipeline import AnalysisOptions, run_analysis
 GOLD = pathlib.Path(__file__).parent / "fixtures" / "legacy_full_portfolio.csv"
 
 
+# Stari app.py: bez dopune prošlom sezonom (conftest) i bez L10 ulaza za minute/rasipanje
+LEGACY = dict(use_l10_minutes=False, use_l10_sigma=False)
+
 @pytest.fixture(scope="module")
 def result(real_data, bundle_legacy_mode):
     offer = real_data.data_dir / "offer_latest.csv"
     if not offer.exists():
         pytest.skip("nema data/offer_latest.csv")
-    return run_analysis(read_offer_file(offer), bundle_legacy_mode, AnalysisOptions())
+    return run_analysis(read_offer_file(offer), bundle_legacy_mode, AnalysisOptions(**LEGACY))
 
 
 def test_matches_legacy_golden_output(result):
     gold = pd.read_csv(GOLD)
     new = result.df.reset_index(drop=True)
-    assert new.shape == gold.shape
+    # Novi kod smije dodati kolone (npr. Minutes Base, Prior Weight); zlatne kolone moraju postojati i biti iste
+    missing = [c for c in gold.columns if c not in new.columns]
+    assert not missing, f"nedostaju kolone iz zlatnog izlaza: {missing}"
+    assert len(new) == len(gold)
+    new = new[gold.columns]
     assert set(new.columns) == set(gold.columns)
     assert new["Player"].tolist() == gold["Player"].tolist()
     for c in gold.columns:
@@ -51,13 +58,13 @@ def test_summary_counts(result):
 def test_filters_and_options_change_output(real_data, bundle_legacy_mode):
     offer = real_data.data_dir / "offer_latest.csv"
     txt = read_offer_file(offer)
-    strict = run_analysis(txt, bundle_legacy_mode, AnalysisOptions(min_ev=10.0, only_positive=True, mc_sims=500))
+    strict = run_analysis(txt, bundle_legacy_mode, AnalysisOptions(min_ev=10.0, only_positive=True, mc_sims=500, **LEGACY))
     # filter Min EV se primjenjuje PRIJE kazne za koncentraciju (kao u originalu), pa se dijeli kaznom
     penalty = strict.df["Conc Penalty"] if "Conc Penalty" in strict.df.columns else 1.0
     assert strict.ok and (strict.df["Best EV %"] / penalty >= 10.0 - 1e-6).all()
-    skipped = run_analysis(txt, bundle_legacy_mode, AnalysisOptions(game_statuses={"MIN": {"state": "in", "detail": "Q3"}}))
+    skipped = run_analysis(txt, bundle_legacy_mode, AnalysisOptions(game_statuses={"MIN": {"state": "in", "detail": "Q3"}}, **LEGACY))
     assert skipped.skipped_active and all(s["Team"] == "MIN" or s["Opp"] == "MIN" for s in skipped.skipped_active)
-    override = run_analysis(txt, bundle_legacy_mode, AnalysisOptions(recent_form_override={"anthony edwards": 40.0}))
+    override = run_analysis(txt, bundle_legacy_mode, AnalysisOptions(recent_form_override={"anthony edwards": 40.0}, **LEGACY))
     assert override.recent_form_count == 1
     assert run_analysis("", bundle_legacy_mode).ok is False
     assert run_analysis("Nobody Here,20.5,1.9,1.9", bundle_legacy_mode).message.startswith("Nijedan igrač")

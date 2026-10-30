@@ -179,6 +179,8 @@ def build_player_context(
     is_home: bool = True,
     rest_days: int = 2,
     opp_rest_days: int = 2,
+    use_l10_minutes: bool = False,   # minute: sezonski prosjek dopunjen minutama iz zadnjih 10 utakmica
+    use_l10_sigma: bool = False,     # rasipanje: formula dopunjena stvarnim rasipanjem iz zadnjih 10 utakmica
 ) -> Dict[str, Any]:
     """Izračunaj projekciju poena i sve faktore za jednog igrača.
 
@@ -225,7 +227,25 @@ def build_player_context(
         total_factor = clamp(1.0 + 0.25 * (float(total_match_used) / league_total_proxy - 1.0), 0.90, 1.12)
 
     gp = get_float(r0, "GP", 20.0)
-    minutes_proj = season_min
+
+    # Minute: sezonski prosjek, po želji dopunjen minutama iz zadnjih 10 utakmica (L10_MIN).
+    # Težina L10 raste sa brojem utakmica u formi: 0,12 po utakmici, najviše 0,60 (od 5 utakmica).
+    l10_min_val = l10_std_val = None
+    l10_games_val = 0.0
+    if l10_df is not None and "NAME_KEY" in l10_df.columns and (use_l10_minutes or use_l10_sigma):
+        _l10_early = l10_df[l10_df["NAME_KEY"] == player_name_key]
+        if not _l10_early.empty:
+            _re = _l10_early.iloc[0]
+            l10_min_val = get_float(_re, "L10_MIN", None)
+            l10_std_val = get_float(_re, "L10_STD", None)
+            l10_games_val = float(get_float(_re, "GAMES_PLAYED", 0.0) or 0.0)
+    minutes_base = season_min
+    l10_min_weight = 0.0
+    if (use_l10_minutes and l10_min_val is not None and np.isfinite(l10_min_val) and l10_min_val > 0
+            and season_min > 0):
+        l10_min_weight = clamp(0.12 * (l10_games_val if l10_games_val > 0 else 10.0), 0.0, 0.60)
+        minutes_base = (1.0 - l10_min_weight) * season_min + l10_min_weight * float(l10_min_val)
+    minutes_proj = minutes_base
 
     team_net = get_float(team_row, "NET_RATING", 0.0) if team_row is not None else 0.0
     opp_net = get_float(opp_row, "NET_RATING", 0.0) if opp_row is not None else 0.0
@@ -296,13 +316,13 @@ def build_player_context(
     minutes_proj = minutes_proj * mins_context * pace_factor * direct_player_penalty
     minutes_proj *= clamp(1.0 + 0.0004 * injured_minutes_lost, 0.99, 1.04)
     minutes_proj = clamp(minutes_proj, 8.0, 40.0)
-    cap_pct = {34: 1.02, 28: 1.04, 20: 1.06}
+    cap_pct = {34: 1.02, 28: 1.04, 20: 1.06}   # gornja granica u odnosu na osnovu minuta (bez L10 = sezonski prosjek)
     for threshold, cap in cap_pct.items():
-        if season_min >= threshold:
-            minutes_proj = min(minutes_proj, season_min * cap)
+        if minutes_base >= threshold:
+            minutes_proj = min(minutes_proj, minutes_base * cap)
             break
     else:
-        minutes_proj = min(minutes_proj, season_min * 1.10)
+        minutes_proj = min(minutes_proj, minutes_base * 1.10)
     minutes_proj = clamp(minutes_proj, 8.0, 40.0)
 
     usage_factor = clamp(
@@ -607,6 +627,11 @@ def build_player_context(
     cv_base = clamp(0.38 - 0.004 * (usg - 20.0), 0.30, 0.46) if np.isfinite(usg) else 0.38
     sigma = float(final_projection) * cv_base
     sigma += 0.5 * clamp(abs(minutes_proj - season_min) / max(season_min, 8.0), 0.0, 1.0)
+    sigma_l10_weight = 0.0
+    if use_l10_sigma and l10_std_val is not None and np.isfinite(l10_std_val) and l10_std_val > 0:
+        # stvarno rasipanje igrača u zadnjih 10 utakmica: 0,10 težine po utakmici, najviše 0,50
+        sigma_l10_weight = clamp(0.10 * (l10_games_val if l10_games_val > 0 else 10.0), 0.0, 0.50)
+        sigma = (1.0 - sigma_l10_weight) * sigma + sigma_l10_weight * float(l10_std_val)
     if line_val > 0:
         sigma = min(sigma, line_val * (0.52 if np.isfinite(usg) and usg >= 28 else 0.48))
     sigma = float(clamp(sigma, max(line_val * 0.28, 2.0) if line_val > 0 else 2.0, 13.0))
@@ -622,6 +647,8 @@ def build_player_context(
         "total_factor": total_factor, "injury_boost": injury_boost,
         "direct_player_penalty": direct_player_penalty,
         "injury_status": self_status,
+        "minutes_base": minutes_base, "l10_min": l10_min_val, "l10_min_weight": l10_min_weight,
+        "l10_std": l10_std_val, "sigma_l10_weight": sigma_l10_weight,
         "usage_factor": usage_factor, "shot_factor": shot_factor,
         "ft_factor": ft_factor, "efficiency_factor": efficiency_factor,
         "playmaking_factor": playmaking_factor, "turnover_factor": turnover_factor,

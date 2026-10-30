@@ -38,6 +38,8 @@ class AnalysisOptions:
     game_statuses: Dict[str, dict] = field(default_factory=dict)
     schedule: Optional[ScheduleContext] = None   # ESPN: domaćin/gost, B2B, odmor i današnji mečevi (automatski)
     exclude_out: bool = True                     # igrači sa statusom OUT/INACTIVE ne ulaze u rangiranje
+    use_l10_minutes: bool = True                 # minute dopunjene minutama iz zadnjih 10 utakmica (L10_MIN)
+    use_l10_sigma: bool = True                   # rasipanje dopunjeno stvarnim rasipanjem iz zadnjih 10 (L10_STD)
     seed: int = 42
 
 
@@ -167,6 +169,7 @@ def build_projections(rows: List[OfferRow], bundle: DataBundle, options: Analysi
             def_matchup_df=bundle.def_matchup, off_matchup_df=bundle.off_matchup,
             line_val=float(line_val), b2b_team=b2b_team, b2b_opp=b2b_opp,
             is_home=is_home, rest_days=rest_days, opp_rest_days=opp_rest_days,
+            use_l10_minutes=options.use_l10_minutes, use_l10_sigma=options.use_l10_sigma,
         )
 
         # Igrač koji je OUT ne igra: kladionica takvu opkladu poništava, pa ne ulazi u rangiranje
@@ -192,6 +195,10 @@ def build_projections(rows: List[OfferRow], bundle: DataBundle, options: Analysi
             "Under Odds":           float(under_odds),
             "PPM":                  round(float(ctx["ppm"]), 4),
             "Minutes":              round(float(ctx["minutes_proj"]), 2),
+            "Minutes Base":         round(float(ctx.get("minutes_base", ctx["minutes_proj"])), 2),
+            "L10 MIN":              round(float(ctx["l10_min"]), 2) if ctx.get("l10_min") is not None and np.isfinite(ctx["l10_min"]) else None,
+            "L10 STD":              round(float(ctx["l10_std"]), 2) if ctx.get("l10_std") is not None and np.isfinite(ctx["l10_std"]) else None,
+            "Prior Weight":         round(float(get_float(r0, "PRIOR_WEIGHT", 0.0) or 0.0), 3),
             "Usage %":              round(float(ctx["usg"]), 2) if np.isfinite(ctx["usg"]) else None,
             "PIE":                  round(float(ctx["pie"]), 3) if np.isfinite(ctx["pie"]) else None,
             "AST_RATIO":            round(float(ctx["ast_ratio"]), 2) if np.isfinite(ctx["ast_ratio"]) else None,
