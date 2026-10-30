@@ -77,7 +77,8 @@ def cmd_analyze(args) -> int:
 
     settings = _settings_from_args(args)
     try:
-        bundle = load_bundle(settings, fill_injury_team_from_players=not args.no_fill_injury_team)
+        bundle = load_bundle(settings, fill_injury_team_from_players=not args.no_fill_injury_team,
+                             blend_prior_season=not args.no_prior_season)
     except MissingDataError as e:
         print(f"❌ {e}")
         return 1
@@ -92,7 +93,8 @@ def cmd_analyze(args) -> int:
         schedule_ctx = fetch_schedule_context()
 
     options = AnalysisOptions(mc_sims=args.mc_sims, min_ev=args.min_ev, only_positive=args.only_positive,
-                              game_statuses=schedule_ctx.statuses if schedule_ctx else {}, schedule=schedule_ctx)
+                              game_statuses=schedule_ctx.statuses if schedule_ctx else {}, schedule=schedule_ctx,
+                              use_l10_minutes=not args.no_l10_minutes, use_l10_sigma=not args.no_l10_sigma)
     result = run_analysis(read_offer_file(offer_path), bundle, options)
 
     print(f"Sezona {settings.season} | ponuda: {offer_path.name} | redova: {len(result.offer_rows)} "
@@ -154,7 +156,7 @@ def cmd_analyze(args) -> int:
 def cmd_fetch_offer(args) -> int:
     from .odds_api import fetch_daily_offer
     settings = _settings_from_args(args)
-    res = fetch_daily_offer(settings, log=print)
+    res = fetch_daily_offer(settings, log=print, best_odds=not args.single_book, closing=args.closing)
     if not res.ok:
         print(f"❌ {res.message}")
         return 1
@@ -182,7 +184,7 @@ def cmd_settle(args) -> int:
     hist = Path(getattr(args, "history_dir", None) or settings.history_dir)
     if not args.report:
         print(f"📒 Poravnanje analiza iz {hist} sa stvarnim poenima (NBA Stats game log)...")
-        events = settle_history(hist, stake=args.stake, force=args.force, log=print)
+        events = settle_history(hist, stake=args.stake, force=args.force, log=print, closing_dir=settings.data_dir)
         n = {k: sum(1 for e in events if e["status"] == k) for k in ("settled", "pending", "no_data", "error")}
         print(f"Poravnato: {n['settled']} | čeka mečeve: {n['pending']} | game log još nema datum: {n['no_data']} | greške: {n['error']}")
         for e in events:
@@ -252,9 +254,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-fill-injury-team", action="store_true",
                    help="ne dopunjavaj tim u tabeli ozljeda iz baze igrača (ponašanje starog app.py)")
     s.add_argument("--history-dir", help="folder za istoriju (podrazumijevano: history/)")
+    s.add_argument("--no-prior-season", action="store_true",
+                   help="ne dopunjavaj ranu sezonu prošlom sezonom (grupa B)")
+    s.add_argument("--no-l10-minutes", action="store_true", help="minute samo iz sezonskog prosjeka (bez L10_MIN)")
+    s.add_argument("--no-l10-sigma", action="store_true", help="rasipanje samo iz formule (bez L10_STD)")
     s.set_defaults(func=cmd_analyze)
 
     s = sub.add_parser("fetch-offer", parents=[common], help="povuci dnevnu ponudu sa The Odds API")
+    s.add_argument("--single-book", action="store_true",
+                   help="kvote samo od kladionice najvišeg prioriteta (bez traženja najbolje kvote)")
+    s.add_argument("--closing", action="store_true",
+                   help="snimi zatvorene linije u data/closing_<datum>.csv (za CLV); ponuda se ne mijenja; troši API zahtjeve")
     s.set_defaults(func=cmd_fetch_offer)
 
     s = sub.add_parser("refresh", parents=[common], help="osvježi podatke")

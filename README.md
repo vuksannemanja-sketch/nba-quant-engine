@@ -91,6 +91,24 @@ Pravila: računa se samo OVER/UNDER (NO VALUE nije opklada); igrač koji nije ig
 
 Preporuka: dvije do tri sedmice samo snimati i poravnavati, bez uplata, pa tek onda zaključivati o modelu.
 
+## Ulazi modela iz grupe B (uključeni, mogu se isključiti)
+
+Formule su iste kao u starom `app.py`; mijenjaju se samo ulazi. Sva tri prekidača su u bočnoj traci
+(„🧪 Ulazi modela“) i u komandnoj liniji (`analyze --no-prior-season --no-l10-minutes --no-l10-sigma`).
+
+- **Prošla sezona na početku sezone.** Do 20 odigranih utakmica statistika igrača i timova je ponderisani prosjek
+  ove i prošle sezone: težina ove = utakmice/20; prošla sezona sa manje od 10 utakmica vrijedi srazmjerno manje;
+  igrač bez prošle sezone ostaje netaknut. Kolona `Prior Weight` u tabeli pokazuje udio prošle sezone.
+- **Minute iz zadnjih 10 utakmica.** Osnova minuta = sezonski prosjek dopunjen sa `L10_MIN` (težina 0,12 po utakmici
+  u formi, najviše 0,60). Gornje granice minuta važe u odnosu na tu osnovu. Kolone `Minutes Base`, `L10 MIN`.
+- **Rasipanje iz zadnjih 10 utakmica.** Rasipanje iz formule se miješa sa stvarnim `L10_STD` igrača (težina 0,10 po
+  utakmici, najviše 0,50), pa ostaju iste granice kao prije. Kolona `L10 STD`.
+
+Kvote: `fetch-offer` za svakog igrača uzima liniju od kladionice najvišeg prioriteta, a kvote najbolju Over i najbolju
+Under među kladionicama koje nude **istu** liniju (detalji po kladionici u `data/offer_books_<datum>.csv`;
+`--single-book` isključuje). `fetch-offer --closing` snima zatvorene linije u `data/closing_<datum>.csv` i tada
+`settle` računa i CLV. Taj drugi poziv troši API zahtjeve, pa nije u dnevnom robotu.
+
 ## Šta se računa automatski i koje zaštite postoje
 
 - **Domaćin/gost, back-to-back i dani odmora** se čitaju iz ESPN rasporeda (danas i prethodnih 6 dana) pri svakoj

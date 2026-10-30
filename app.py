@@ -53,8 +53,8 @@ def _data_stamp(s: Settings) -> tuple:
 
 
 @st.cache_data(ttl=3600, show_spinner="Učitavam CSV podatke...")
-def _load_bundle_cached(data_dir: str, season: str, fill_injury_team: bool, stamp: tuple) -> DataBundle:
-    return load_bundle(Settings.load(data_dir=data_dir, season=season), fill_injury_team)
+def _load_bundle_cached(data_dir: str, season: str, fill_injury_team: bool, blend_prior: bool, stamp: tuple) -> DataBundle:
+    return load_bundle(Settings.load(data_dir=data_dir, season=season), fill_injury_team, blend_prior_season=blend_prior)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -147,6 +147,14 @@ st.sidebar.markdown("---")
 st.sidebar.button("▶️ Pokreni / Osvježi analizu", type="primary", **WIDE_BTN)
 st.sidebar.caption("Klikni nakon što uneseš Recent Form, B2B i Injury podatke")
 
+# ── Ulazi modela (grupa B) ────────────────────────────────────
+st.sidebar.markdown("---")
+st.sidebar.subheader("🧪 Ulazi modela")
+use_prior_season = st.sidebar.checkbox("Prošla sezona na početku sezone (do 20 utakmica)", value=True, key="opt_prior")
+use_l10_minutes = st.sidebar.checkbox("Minute iz zadnjih 10 utakmica (L10_MIN)", value=True, key="opt_l10_min")
+use_l10_sigma = st.sidebar.checkbox("Rasipanje iz zadnjih 10 utakmica (L10_STD)", value=True, key="opt_l10_std")
+st.sidebar.caption("Isključi sve tri za ponašanje starog modela. Formule su iste, mijenjaju se samo ulazi.")
+
 # ── Osvježavanje podataka ─────────────────────────────────────
 st.sidebar.markdown("---")
 st.sidebar.subheader("🗓️ Osvježavanje podataka")
@@ -216,7 +224,7 @@ st.sidebar.caption(f"Sezona: {settings.season} ({settings.season_source}) · {se
 # =====================================================
 
 try:
-    bundle = _load_bundle_cached(str(settings.data_dir), settings.season, True, _data_stamp(settings))
+    bundle = _load_bundle_cached(str(settings.data_dir), settings.season, True, bool(use_prior_season), _data_stamp(settings))
 except MissingDataError as e:
     st.error(str(e))
     st.stop()
@@ -247,6 +255,8 @@ if injury_override_txt and injury_override_txt.strip():
 
 
 with st.expander("🔍 DEBUG DATA — status svih izvora"):
+    for _note in bundle.notes:
+        st.info(_note)
     st.markdown("**📁 CSV fajlovi na disku:**")
     for _row in settings.data_status():
         if _row["exists"]:
@@ -358,6 +368,7 @@ options = AnalysisOptions(
     recent_form_override=recent_form_override, b2b_teams_manual=b2b_teams_manual,
     b2b_date=b2b_date_input, away_teams_manual=away_teams_manual, rest_days_map=rest_days_map,
     injury_override=injury_override_df, game_statuses=_game_statuses, schedule=_schedule_ctx,
+    use_l10_minutes=bool(use_l10_minutes), use_l10_sigma=bool(use_l10_sigma),
 )
 with st.spinner("Računam projekcije i Monte Carlo..."):
     result = run_analysis(offer_text, bundle, options)
@@ -512,7 +523,7 @@ if _sc1.button("🔄 Poravnaj nove analize", help="Povlači game log sa NBA Stat
     with st.spinner("Povlačim stvarne rezultate i poravnavam..."):
         _msgs: list = []
         try:
-            _events = settle_history(settings.history_dir, stake=1.0, log=_msgs.append)
+            _events = settle_history(settings.history_dir, stake=1.0, log=_msgs.append, closing_dir=settings.data_dir)
             _n = {k: sum(1 for e in _events if e["status"] == k) for k in ("settled", "pending", "no_data", "error")}
             _sc2.success(f"Poravnato: {_n['settled']} | čeka mečeve: {_n['pending']} | game log još nema datum: {_n['no_data']} | greške: {_n['error']}")
             for _m in _msgs:
