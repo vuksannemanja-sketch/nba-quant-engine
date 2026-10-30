@@ -17,3 +17,7 @@ history/
 .DS_Store
 .vscode/
 .idea/
+
+# Streamlit 1.66+ sam pravi ove foldere (agent skills) pri pokretanju
+.agents/
+.claude/skills/

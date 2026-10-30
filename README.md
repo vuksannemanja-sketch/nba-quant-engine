@@ -69,6 +69,17 @@ treba samo ako želiš nasilno drugu sezonu.
 `.env` promjenljive: `ODDS_API_KEY`, `NBA_SEASON`, `NBA_DATA_DIR`, `NBA_HISTORY_DIR`, `ODDS_BOOKMAKERS` (vidi `.env.example`).
 Fajl `.env` se ne šalje na GitHub.
 
+## Šta se računa automatski i koje zaštite postoje
+
+- **Domaćin/gost, back-to-back i dani odmora** se čitaju iz ESPN rasporeda (danas i prethodnih 6 dana) pri svakoj
+  analizi. Ručni unos u bočnoj traci (Away timovi, B2B timovi, Rest days) služi samo za ispravke i ima prednost.
+  Kad ESPN nije dostupan, važe stare podrazumijevane vrijednosti (svi domaćini, 2 dana odmora) i aplikacija to kaže.
+- **Igrači sa statusom OUT/INACTIVE** (iz tabele ozljeda ili ručnog injury overridea) ne ulaze u rangiranje, jer
+  kladionica opkladu na igrača koji ne igra poništava. Prikazani su posebno („⛔ Isključeni igrači“).
+  Komandna linija: isto; u kodu se može ugasiti sa `AnalysisOptions(exclude_out=False)`.
+- **Svježina ponude**: ako nijedan par tim–protivnik iz ponude nije današnji meč po ESPN rasporedu, aplikacija
+  prikazuje crveno upozorenje, a analiza se **ne snima** u `history/`. Bez rasporeda provjera se preskače.
+
 ## Kako aplikacija računa (ukratko)
 
 1. **Ponuda** se parsira, igrač se traži u bazi (tačno ime, „Prezime, Ime“, inicijal, dijelovi imena, slično ime).
