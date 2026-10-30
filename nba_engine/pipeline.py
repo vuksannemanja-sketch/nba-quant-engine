@@ -16,6 +16,7 @@ from .loaders import DataBundle
 from .model import (build_player_context, estimate_match_total, find_team_row_by_abbr,
                     is_team_b2b, match_player_row, compute_max_edge, compute_per_player_bm_offset)
 from .offer import OfferRow, parse_offer_text
+from .schedule import ScheduleContext
 from .teams import normalize_team_abbr
 from .utils import clamp, get_float, normalize_name, zscore
 
@@ -35,6 +36,8 @@ class AnalysisOptions:
     rest_days_map: Dict[str, int] = field(default_factory=dict)
     injury_override: Optional[pd.DataFrame] = None
     game_statuses: Dict[str, dict] = field(default_factory=dict)
+    schedule: Optional[ScheduleContext] = None   # ESPN: domaćin/gost, B2B, odmor i današnji mečevi (automatski)
+    exclude_out: bool = True                     # igrači sa statusom OUT/INACTIVE ne ulaze u rangiranje
     seed: int = 42
 
 
@@ -61,6 +64,11 @@ class AnalysisResult:
     recent_form_count: int = 0
     injuries_used: Optional[pd.DataFrame] = None
     message: str = ""
+    excluded_out: List[Dict[str, Any]] = field(default_factory=list)   # OUT igrači, opklada bi bila poništena
+    offer_is_today: Optional[bool] = None    # None = raspored nije dostupan, svježina ponude nije provjerena
+    offer_today_matches: int = 0
+    offer_matched_rows: int = 0
+    auto_context: Dict[str, Any] = field(default_factory=dict)         # šta je uzeto iz ESPN rasporeda
 
     @property
     def ok(self) -> bool:
@@ -85,12 +93,17 @@ def merge_injury_override(inj_df: Optional[pd.DataFrame], override: Optional[pd.
 # ---------------------------------------------------------------------------
 
 def build_projections(rows: List[OfferRow], bundle: DataBundle, options: AnalysisOptions,
-                      inj_df: Optional[pd.DataFrame]) -> Tuple[pd.DataFrame, List[Dict], List[Dict]]:
+                      inj_df: Optional[pd.DataFrame]
+                      ) -> Tuple[pd.DataFrame, List[Dict], List[Dict], List[Dict], List[Tuple[str, str]]]:
+    """Vraća (projekcije, nije nađeno, preskočeni mečevi u toku, isključeni OUT, parovi tim-protivnik)."""
     players_df, teams_df = bundle.players, bundle.teams
     statuses = options.game_statuses or {}
+    sched = options.schedule
     results: List[Dict] = []
     not_found: List[Dict] = []
     skipped_active: List[Dict] = []
+    excluded_out: List[Dict] = []
+    matched_pairs: List[Tuple[str, str]] = []
 
     for name, line_val, over_odds, under_odds, opp_from_txt, total_from_txt in rows:
         r0, used_key, method = match_player_row(players_df, name)
@@ -113,6 +126,8 @@ def build_projections(rows: List[OfferRow], bundle: DataBundle, options: Analysi
         # Meč već počeo ili završio? → preskoči
         team_str = str(team_abbr).upper() if pd.notna(team_abbr) else ""
         opp_str = str(opp_team_abbr).upper() if opp_team_abbr and pd.notna(opp_team_abbr) else ""
+        if team_str:
+            matched_pairs.append((team_str, opp_str))
         game_state = None
         for chk in (team_str, opp_str):
             if chk and chk in statuses:
@@ -129,11 +144,14 @@ def build_projections(rows: List[OfferRow], bundle: DataBundle, options: Analysi
         total_match_used = float(total_from_txt) \
             if total_from_txt is not None and np.isfinite(total_from_txt) else total_match_model
 
-        b2b_team = is_team_b2b(bundle.b2b, team_str, options.b2b_date) or (team_str in options.b2b_teams_manual)
-        b2b_opp = is_team_b2b(bundle.b2b, opp_str, options.b2b_date) or (opp_str in options.b2b_teams_manual)
-        is_home = team_str not in options.away_teams_manual
-        rest_days = options.rest_days_map.get(team_str, 2)
-        opp_rest_days = options.rest_days_map.get(opp_str, 2)
+        # B2B, domaćin/gost i odmor: fajl odigranih mečeva + ESPN raspored za danas; ručni unos ima prednost
+        b2b_team = (is_team_b2b(bundle.b2b, team_str, options.b2b_date) or (team_str in options.b2b_teams_manual)
+                    or (sched is not None and sched.is_b2b(team_str)))
+        b2b_opp = (is_team_b2b(bundle.b2b, opp_str, options.b2b_date) or (opp_str in options.b2b_teams_manual)
+                   or (sched is not None and sched.is_b2b(opp_str)))
+        is_home = team_str not in options.away_teams_manual and not (sched is not None and team_str in sched.away_teams)
+        rest_days = _resolve_rest_days(team_str, options)
+        opp_rest_days = _resolve_rest_days(opp_str, options)
         if b2b_team:
             rest_days = 0
         if b2b_opp:
@@ -150,6 +168,13 @@ def build_projections(rows: List[OfferRow], bundle: DataBundle, options: Analysi
             line_val=float(line_val), b2b_team=b2b_team, b2b_opp=b2b_opp,
             is_home=is_home, rest_days=rest_days, opp_rest_days=opp_rest_days,
         )
+
+        # Igrač koji je OUT ne igra: kladionica takvu opkladu poništava, pa ne ulazi u rangiranje
+        if options.exclude_out and ctx.get("injury_status") in ("OUT", "INACTIVE"):
+            excluded_out.append({"Player": str(r0.get("PLAYER_NAME", name)), "Team": team_str or "?",
+                                 "Opp": opp_str or "?", "Line": float(line_val), "Status": ctx["injury_status"],
+                                 "Napomena": "ne igra — opklada bi bila poništena"})
+            continue
 
         results.append({
             "Player":               str(r0.get("PLAYER_NAME", name)),
@@ -208,7 +233,49 @@ def build_projections(rows: List[OfferRow], bundle: DataBundle, options: Analysi
             "Sigma":                round(float(ctx["sigma"]), 2),
         })
 
-    return pd.DataFrame(results), not_found, skipped_active
+    return pd.DataFrame(results), not_found, skipped_active, excluded_out, matched_pairs
+
+
+def _resolve_rest_days(team: str, options: AnalysisOptions) -> int:
+    """Dani odmora: ručni unos → ESPN raspored → podrazumijevano 2 (kao u originalu)."""
+    if team in options.rest_days_map:
+        return int(options.rest_days_map[team])
+    if options.schedule is not None:
+        auto = options.schedule.rest_days(team)
+        if auto is not None:
+            return int(auto)
+    return 2
+
+
+def offer_freshness(pairs: List[Tuple[str, str]], sched: Optional[ScheduleContext]) -> Tuple[Optional[bool], int]:
+    """(da li je ponuda za danas, broj parova koji su današnji mečevi). None kad raspored nije dostupan."""
+    if sched is None or not sched.fetched or not pairs:
+        return None, 0
+    if any(o for _, o in pairs):
+        matches = sum(1 for t, o in pairs if sched.pair_is_today(t, o))
+    else:  # ponuda bez kolone protivnika: dovoljno je da tim igra danas
+        matches = sum(1 for t, _ in pairs if t in sched.teams_today)
+    return matches > 0, matches
+
+
+def auto_context(pairs: List[Tuple[str, str]], sched: Optional[ScheduleContext]) -> Dict[str, Any]:
+    """Šta je za timove iz ponude uzeto iz ESPN rasporeda (za prikaz)."""
+    if sched is None or not sched.fetched:
+        return {}
+    teams = {t for t, _ in pairs if t} | {o for _, o in pairs if o}
+    playing = sorted(t for t in teams if t in sched.teams_today)
+    return {"games_today": len(sched.games_today),
+            "away": [t for t in playing if t in sched.away_teams],
+            "b2b": [t for t in playing if sched.is_b2b(t)],
+            "rest": {t: sched.rest_days(t) for t in playing}}
+
+
+def format_auto_context(ctx: Dict[str, Any]) -> str:
+    if not ctx:
+        return ""
+    rest = ", ".join(f"{t}={d}" for t, d in ctx.get("rest", {}).items()) or "—"
+    return (f"gosti: {', '.join(ctx.get('away', [])) or '—'} | B2B: {', '.join(ctx.get('b2b', [])) or '—'} "
+            f"| dani odmora: {rest}")
 
 
 def compute_bm_offset(df: pd.DataFrame) -> float:
@@ -370,10 +437,15 @@ def run_analysis(offer_text: str, bundle: DataBundle, options: Optional[Analysis
         return AnalysisResult(empty, empty, rows, bad, [], [], None, ConcentrationInfo(),
                               injuries_used=inj_df, message="Nema validnih redova u ponudi.")
 
-    projections, not_found, skipped = build_projections(rows, bundle, options, inj_df)
+    projections, not_found, skipped, excluded_out, pairs = build_projections(rows, bundle, options, inj_df)
+    is_today, today_matches = offer_freshness(pairs, options.schedule)
+    extra = dict(excluded_out=excluded_out, offer_is_today=is_today, offer_today_matches=today_matches,
+                 offer_matched_rows=len(pairs), auto_context=auto_context(pairs, options.schedule))
     if projections.empty:
+        msg = ("Svi matchovani igrači su OUT ili im je meč već počeo." if pairs
+               else "Nijedan igrač nije matchovan u sezonskoj bazi.")
         return AnalysisResult(empty, projections, rows, bad, not_found, skipped, None, ConcentrationInfo(),
-                              injuries_used=inj_df, message="Nijedan igrač nije matchovan u sezonskoj bazi.")
+                              injuries_used=inj_df, message=msg, **extra)
 
     bm_offset = compute_bm_offset(projections)
     df = run_monte_carlo(projections, options.mc_sims, bundle.league_pts_std, seed=options.seed)
@@ -386,7 +458,7 @@ def run_analysis(offer_text: str, bundle: DataBundle, options: Optional[Analysis
         rf_count = int(df["Player"].apply(lambda x: normalize_name(x) in rf_set).sum())
 
     return AnalysisResult(df, projections, rows, bad, not_found, skipped, bm_offset, conc,
-                          recent_form_count=rf_count, injuries_used=inj_df)
+                          recent_form_count=rf_count, injuries_used=inj_df, **extra)
 
 
 def analyze_offer_file(path, bundle: DataBundle, options: Optional[AnalysisOptions] = None) -> AnalysisResult:
