@@ -100,3 +100,40 @@ def test_fetch_daily_offer_reports_bad_key(tmp_path, monkeypatch):
     assert not res.ok and "401" in res.message
     res2 = fetch_daily_offer(settings, log=lambda m: None, players_df=_players(), client=OddsApiClient(""))
     assert not res2.ok and "ODDS_API_KEY" in res2.message
+
+
+def test_extract_props_best_odds_across_books_on_same_line():
+    from nba_engine.odds_api import OFFER_COLUMNS, OFFER_DETAIL_COLUMNS
+    data = _event_payload([("pinnacle", [("Cade Cunningham", 26.5, 1.90, 1.90)]),
+                           ("draftkings", [("Cade Cunningham", 26.5, 2.00, 1.80), ("Jalen Williams", 20.5, 1.9, 1.9)]),
+                           ("bet365", [("Cade Cunningham", 27.5, 2.30, 1.60)])])   # druga linija se ne miješa
+    props = extract_player_props(data, "DET", "OKC", None, _players(), priority=("pinnacle", "draftkings", "bet365"))
+    by = {p["PLAYER"]: p for p in props}
+    cade = by["Cade Cunningham"]
+    assert cade["LINE"] == 26.5 and cade["BOOKMAKER"] == "pinnacle"
+    assert cade["OVER_ODDS"] == 2.00 and cade["OVER_BOOK"] == "draftkings"
+    assert cade["UNDER_ODDS"] == 1.90 and cade["UNDER_BOOK"] == "pinnacle"
+    assert cade["N_BOOKS"] == 3 and cade["N_BOOKS_SAME_LINE"] == 2
+    assert by["Jalen Williams"]["BOOKMAKER"] == "draftkings" and by["Jalen Williams"]["OPP_TEAM"] == "DET"
+    single = extract_player_props(data, "DET", "OKC", None, _players(), priority=("pinnacle",), best_odds=False)
+    s_cade = {p["PLAYER"]: p for p in single}["Cade Cunningham"]
+    assert s_cade["OVER_ODDS"] == 1.90 and s_cade["OVER_BOOK"] == "pinnacle" and s_cade["N_BOOKS"] == 3
+    assert list(props_to_frame(props).columns) == OFFER_COLUMNS
+    assert list(props_to_frame(props, detail=True).columns) == OFFER_DETAIL_COLUMNS
+
+
+def test_fetch_daily_offer_closing_writes_only_closing_file(tmp_path):
+    settings = Settings.load(data_dir=tmp_path, season="2025-26", env_file=tmp_path / "no.env")
+    events = [{"id": "ev1", "home_team": "Detroit Pistons", "away_team": "Oklahoma City Thunder"}]
+    routes = {"/events": events, "/events/ev1/odds": _event_payload([("pinnacle", [("Cade Cunningham", 27.5, 1.9, 1.85)])])}
+    client = OddsApiClient("key", http=_FakeHttp(routes))
+    res = fetch_daily_offer(settings, log=lambda s: None, players_df=_players(), client=client, closing=True)
+    assert res.ok and len(res.paths) == 1 and res.paths[0].name.startswith("closing_")
+    assert not (tmp_path / "offer_latest.csv").exists()
+    closing = pd.read_csv(res.paths[0])
+    assert {"PLAYER", "LINE", "OVER_ODDS", "UNDER_ODDS", "BOOKMAKER", "N_BOOKS"} <= set(closing.columns)
+    res2 = fetch_daily_offer(settings, log=lambda s: None, players_df=_players(), client=client)
+    assert res2.ok and (tmp_path / "offer_latest.csv").exists()
+    assert any(p.name.startswith("offer_books_") for p in res2.paths)
+    assert list(pd.read_csv(tmp_path / "offer_latest.csv").columns) == ["PLAYER", "PLAYER_TEAM", "LINE", "OVER_ODDS",
+                                                                         "UNDER_ODDS", "OPP_TEAM", "TOTAL_MATCH"]

@@ -129,3 +129,37 @@ def test_build_player_context_uses_form_and_h2h():
     assert hot["l10_pts"] == 36.0 and hot["l5_pts"] == 38.0 and hot["h2h_games"] == 4
     assert hot["final_projection"] > plain["final_projection"]
     assert plain["h2h_pts"] == 29.0  # bez H2H prikazuje sezonski prosjek
+
+
+def test_l10_minutes_and_sigma_inputs_are_opt_in():
+    players, teams = _players(), _teams()
+    r0 = players[players["PLAYER_NAME"] == "Luka Doncic"].iloc[0]
+    season_min = float(r0["MIN"])
+    l10 = pd.DataFrame({"NAME_KEY": ["luka doncic"], "L10_PTS": [float(r0["PTS"])], "L5_PTS": [float(r0["PTS"])],
+                        "L3_PTS": [float(r0["PTS"])], "TREND_SLOPE": [0.0], "L10_MIN": [season_min + 8.0],
+                        "L10_STD": [3.0], "GAMES_PLAYED": [10]})
+    kwargs = dict(r0=r0, players_df=players, teams_df=teams,
+                  team_row=find_team_row_by_abbr(teams, "LAL"), opp_row=find_team_row_by_abbr(teams, "DEN"),
+                  inj_df=None, team_abbr="LAL", player_name_key="luka doncic", total_match_used=230.0,
+                  opp_team_abbr="DEN", line_val=28.5, l10_df=l10)
+    base = build_player_context(**kwargs)
+    assert base["minutes_base"] == base["season_min"] and base["l10_min_weight"] == 0.0 and base["sigma_l10_weight"] == 0.0
+
+    with_min = build_player_context(**{**kwargs, "use_l10_minutes": True})
+    assert abs(with_min["l10_min_weight"] - 0.6) < 1e-9
+    assert abs(with_min["minutes_base"] - (0.4 * season_min + 0.6 * (season_min + 8.0))) < 1e-9
+    assert with_min["minutes_proj"] > base["minutes_proj"]
+    assert with_min["final_projection"] >= base["final_projection"]
+
+    with_sig = build_player_context(**{**kwargs, "use_l10_sigma": True})
+    assert abs(with_sig["sigma_l10_weight"] - 0.5) < 1e-9 and with_sig["sigma"] <= base["sigma"]
+    assert with_sig["minutes_proj"] == base["minutes_proj"]            # sigma ulaz ne dira minute
+
+    # manje utakmica u formi → manja težina
+    few = l10.assign(GAMES_PLAYED=[3])
+    ctx_few = build_player_context(**{**kwargs, "l10_df": few, "use_l10_minutes": True, "use_l10_sigma": True})
+    assert abs(ctx_few["l10_min_weight"] - 0.36) < 1e-9 and abs(ctx_few["sigma_l10_weight"] - 0.3) < 1e-9
+    # bez L10 tabele: uključeni ulazi nemaju šta da koriste → identično kao bez L10 tabele i bez ulaza
+    no_l10 = build_player_context(**{**kwargs, "l10_df": None})
+    ctx_none = build_player_context(**{**kwargs, "l10_df": None, "use_l10_minutes": True, "use_l10_sigma": True})
+    assert ctx_none == no_l10 and ctx_none["minutes_base"] == no_l10["season_min"]

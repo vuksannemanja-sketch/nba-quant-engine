@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from .config import Settings
+from .config import previous_season, Settings
 from .teams import ABBR_TO_TEAM_ID, TEAM_ID_TO_ABBR, normalize_team_abbr
 from .utils import extract_injury_status, fix_usg_scale, normalize_name
 
@@ -446,6 +446,7 @@ class DataBundle:
     b2b: Optional[pd.DataFrame] = None
     paths: Dict[str, Optional[Path]] = field(default_factory=dict)
     notes: List[str] = field(default_factory=list)
+    prior_info: Dict[str, object] = field(default_factory=dict)   # dopuna prošlom sezonom (vidi prior.py)
 
     @property
     def league_pts_std(self) -> float:
@@ -463,11 +464,45 @@ class MissingDataError(RuntimeError):
     """Nedostaje obavezan CSV (igrači ili timovi)."""
 
 
-def load_bundle(settings: Settings, fill_injury_team_from_players: bool = True) -> DataBundle:
+def _apply_prior_season(settings: Settings, players: pd.DataFrame, teams: pd.DataFrame,
+                        notes: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, object]]:
+    """Rana sezona: dopuni igrače i timove prošlom sezonom ako njeni fajlovi postoje (vidi prior.py)."""
+    from .prior import blend_players, blend_teams
+    prev = previous_season(settings.season)
+    try:
+        prior_settings = Settings.load(data_dir=settings.data_dir, season=prev, env_file=settings.env_file,
+                                       history_dir=settings.history_dir)
+        ppaths = prior_settings.all_csv_paths()
+    except Exception as e:  # noqa: BLE001
+        notes.append(f"Prošla sezona ({prev}) nije dostupna: {e}")
+        return players, teams, {"season": prev, "available": False}
+    if ppaths.get("players_main") is None or ppaths.get("teams") is None:
+        return players, teams, {"season": prev, "available": False}
+    try:
+        prior_players = load_players_merged(ppaths["players_main"], ppaths["players_base"],
+                                            ppaths["players_adv"], ppaths["players_misc"])
+        prior_teams = load_teams_csv(ppaths["teams"])
+    except Exception as e:  # noqa: BLE001
+        notes.append(f"Prošla sezona ({prev}) nije učitana: {e}")
+        return players, teams, {"season": prev, "available": False}
+    players, pinfo = blend_players(players, prior_players)
+    teams, tinfo = blend_teams(teams, prior_teams)
+    info: Dict[str, object] = {"season": prev, "available": True, "players_blended": pinfo["blended"],
+                               "players_mean_prior_weight": pinfo["mean_prior_weight"], "teams_blended": tinfo["blended"]}
+    if pinfo["blended"] or tinfo["blended"]:
+        notes.append(f"Rana sezona: {pinfo['blended']} igrača i {tinfo['blended']} timova dopunjeno prošlom sezonom ({prev}); "
+                     f"prosječna težina prošle sezone kod dopunjenih igrača {pinfo['mean_prior_weight']:.0%}.")
+    return players, teams, info
+
+
+def load_bundle(settings: Settings, fill_injury_team_from_players: bool = True,
+                blend_prior_season: bool = True) -> DataBundle:
     """Učitaj sve CSV fajlove prema podešavanjima.
 
     ``fill_injury_team_from_players``: ako tabela ozljeda nema tim (prazna kolona),
     dopuni ga iz baze igrača po imenu — bez toga model ozljeda nema efekta.
+    ``blend_prior_season``: na početku sezone (do 20 utakmica) statistiku igrača i timova dopuni
+    prošlom sezonom, srazmjerno broju odigranih utakmica (``prior.py``). Isključi za staro ponašanje.
     """
     paths = settings.all_csv_paths()
     if paths["players_main"] is None or paths["teams"] is None:
@@ -480,6 +515,9 @@ def load_bundle(settings: Settings, fill_injury_team_from_players: bool = True) 
     players = load_players_merged(paths["players_main"], paths["players_base"],
                                   paths["players_adv"], paths["players_misc"])
     teams = load_teams_csv(paths["teams"])
+    prior_info: Dict[str, object] = {}
+    if blend_prior_season:
+        players, teams, prior_info = _apply_prior_season(settings, players, teams, notes)
     injuries = load_injuries_csv(paths["injuries"])
     if fill_injury_team_from_players and injuries is not None:
         injuries, n_filled = fill_injury_teams(injuries, players)
@@ -492,5 +530,5 @@ def load_bundle(settings: Settings, fill_injury_team_from_players: bool = True) 
         def_matchup=load_def_matchup_csv(paths["def_matchup"]),
         off_matchup=load_off_matchup_csv(paths["off_matchup"]),
         b2b=load_b2b_csv(paths["b2b"]),
-        paths=paths, notes=notes,
+        paths=paths, notes=notes, prior_info=prior_info,
     )

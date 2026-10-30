@@ -140,11 +140,36 @@ def find_actual(actuals: pd.DataFrame, name_key: str, opp: Optional[str], game_d
     return cand.iloc[0]
 
 
+CLOSING_COLUMNS = ["NAME_KEY", "Closing Line", "Closing Over Odds", "Closing Under Odds"]
+
+
+def load_closing(path) -> Optional[pd.DataFrame]:
+    """Zatvorene linije iz ``closing_<datum>.csv`` (fetch-offer --closing) → kolone za CLV."""
+    path = Path(path)
+    if not path.exists():
+        return None
+    try:
+        df = pd.read_csv(path)
+    except Exception:  # noqa: BLE001
+        return None
+    if "PLAYER" not in df.columns or "LINE" not in df.columns:
+        return None
+    out = pd.DataFrame({"NAME_KEY": df["PLAYER"].astype(str).map(normalize_name),
+                        "Closing Line": pd.to_numeric(df["LINE"], errors="coerce"),
+                        "Closing Over Odds": pd.to_numeric(df.get("OVER_ODDS"), errors="coerce"),
+                        "Closing Under Odds": pd.to_numeric(df.get("UNDER_ODDS"), errors="coerce")})
+    return out.dropna(subset=["Closing Line"]).drop_duplicates("NAME_KEY")
+
+
 def settle_analysis(analysis: pd.DataFrame, actuals: pd.DataFrame, game_date: _dt.date,
-                    stake: float = 1.0) -> Tuple[pd.DataFrame, Dict]:
-    """Poravnaj jednu snimljenu analizu. Vraća (tabela po pick-u, zbirni red za ledger bez imena fajla)."""
+                    stake: float = 1.0, closing: Optional[pd.DataFrame] = None) -> Tuple[pd.DataFrame, Dict]:
+    """Poravnaj jednu snimljenu analizu. Vraća (tabela po pick-u, zbirni red za ledger bez imena fajla).
+    ``closing``: zatvorene linije (vidi load_closing) → računa se i CLV."""
     picks = analysis[analysis["Model Pick"].isin(("OVER", "UNDER"))].copy()
     picks["NAME_KEY"] = picks["Player"].astype(str).map(normalize_name)
+    if closing is not None and not closing.empty:
+        picks = picks.drop(columns=[c for c in CLOSING_COLUMNS[1:] if c in picks.columns])
+        picks = picks.merge(closing[[c for c in CLOSING_COLUMNS if c in closing.columns]], on="NAME_KEY", how="left")
     rows = []
     for _, r in picks.iterrows():
         hit = find_actual(actuals, r["NAME_KEY"], r.get("OPP_TEAM"), game_date)
@@ -198,8 +223,10 @@ def _append_ledger(history_dir, row: Dict) -> None:
 
 
 def settle_history(history_dir, provider: Optional[ActualsProvider] = None, today: Optional[_dt.date] = None,
-                   stake: float = 1.0, force: bool = False, log: Optional[Callable[[str], None]] = None) -> List[Dict]:
-    """Poravnaj sve još neporavnate analize čiji su mečevi završeni. Vraća listu događaja (status po fajlu)."""
+                   stake: float = 1.0, force: bool = False, log: Optional[Callable[[str], None]] = None,
+                   closing_dir=None) -> List[Dict]:
+    """Poravnaj sve još neporavnate analize čiji su mečevi završeni. Vraća listu događaja (status po fajlu).
+    ``closing_dir``: folder sa ``closing_<datum>.csv`` (obično data/) za CLV; bez njega CLV ostaje prazan."""
     history_dir = Path(history_dir)
     today = today or _dt.date.today()
     provider = provider or cached_provider()
@@ -234,7 +261,8 @@ def settle_history(history_dir, provider: Optional[ActualsProvider] = None, toda
         except Exception as e:  # noqa: BLE001
             events.append({"Analysis": name, "status": "error", "detail": f"ne mogu pročitati analizu: {e}"})
             continue
-        settled, row = settle_analysis(analysis, actuals, gdate, stake=stake)
+        closing = load_closing(Path(closing_dir) / f"closing_{gdate.isoformat()}.csv") if closing_dir else None
+        settled, row = settle_analysis(analysis, actuals, gdate, stake=stake, closing=closing)
         row = {"Analysis": name, **row, "Settled At": _dt.datetime.now().strftime("%Y-%m-%d %H:%M")}
         settled.to_csv(history_dir / f"{SETTLED_PREFIX}{name}", index=False)
         _append_ledger(history_dir, row)

@@ -29,4 +29,4 @@ def real_data(settings):
 def bundle_legacy_mode(real_data):
     """Podaci učitani kao u starom app.py (bez dopune tima u tabeli ozljeda)."""
     from nba_engine.loaders import load_bundle
-    return load_bundle(real_data, fill_injury_team_from_players=False)
+    return load_bundle(real_data, fill_injury_team_from_players=False, blend_prior_season=False)

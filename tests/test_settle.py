@@ -124,3 +124,25 @@ def test_settle_history_provider_error_is_reported(tmp_path):
     events = S.settle_history(hist, provider=broken, today=dt.date(2026, 11, 3))
     assert events[0]["status"] == "error" and "offline" in events[0]["detail"]
     assert S.load_ledger(hist).empty
+
+
+def test_closing_lines_give_clv(tmp_path):
+    actuals = S.actuals_from_game_log(_game_log())
+    closing_csv = tmp_path / "closing_2026-10-30.csv"
+    pd.DataFrame({"PLAYER": ["Luka Doncic", "Mike Conley", "Nobody"], "LINE": [26.5, 11.5, 5.5],
+                  "OVER_ODDS": [1.9, 1.9, 1.9], "UNDER_ODDS": [1.9, 1.9, 1.9]}).to_csv(closing_csv, index=False)
+    closing = S.load_closing(closing_csv)
+    assert list(closing.columns) == S.CLOSING_COLUMNS and len(closing) == 3
+    settled, row = S.settle_analysis(_analysis(), actuals, dt.date(2026, 10, 30), closing=closing)
+    clv = settled.set_index("Player")["CLV"].to_dict()
+    assert clv["Luka Doncic"] == 1.0          # UNDER 27.5, zatvoreno 26.5 → linija išla u našu korist
+    assert clv["Mike Conley"] == 1.0          # OVER 10.5, zatvoreno 11.5
+    assert pd.isna(clv["Jaxson Hayes"])       # nema zatvorene linije
+    assert row["Avg CLV"] == 1.0
+    assert S.load_closing(tmp_path / "nema.csv") is None
+
+    hist = tmp_path / "h"
+    hist.mkdir()
+    _analysis().to_csv(hist / "analysis_2026-10-30_19-00-00.csv", index=False)
+    events = S.settle_history(hist, provider=lambda season: actuals, today=dt.date(2026, 11, 3), closing_dir=tmp_path)
+    assert events[0]["status"] == "settled" and S.load_ledger(hist).iloc[0]["Avg CLV"] == 1.0
