@@ -20,9 +20,9 @@ from nba_engine.history import analysis_fingerprint, save_analysis, save_evaluat
 from nba_engine.loaders import DataBundle, MissingDataError, load_bundle
 from nba_engine.offer import (offer_rows_to_frame, parse_injury_override, parse_recent_form_input,
                               parse_rest_days, parse_team_list, read_offer_file)
-from nba_engine.pipeline import MC_SIMS_CHOICES, AnalysisOptions, run_analysis
+from nba_engine.pipeline import MC_SIMS_CHOICES, AnalysisOptions, format_auto_context, run_analysis
 from nba_engine.refresh import ALL_STEPS, DEFAULT_STEPS, STEP_LABELS, run_refresh
-from nba_engine.schedule import STATE_ICON, fetch_game_statuses, games_for_date
+from nba_engine.schedule import STATE_ICON, fetch_schedule_context, games_for_date
 from nba_engine.utils import normalize_name, smart_decode
 
 
@@ -57,8 +57,9 @@ def _load_bundle_cached(data_dir: str, season: str, fill_injury_team: bool, stam
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _game_statuses_cached(today_iso: str) -> dict:
-    return fetch_game_statuses()
+def _schedule_cached(today_iso: str):
+    """ESPN raspored: statusi mečeva, domaćin/gost, B2B, odmor i današnji parovi (keš po danu)."""
+    return fetch_schedule_context()
 
 
 def _fmt_age(hours: float) -> str:
@@ -114,7 +115,7 @@ if recent_form_override:
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔁 Back-to-Back")
-st.sidebar.caption("Upiši kratice timova koji igraju B2B danas (odvojeno zarezom)")
+st.sidebar.caption("B2B se računa automatski iz ESPN rasporeda; ovdje upiši samo dopune (odvojeno zarezom)")
 b2b_teams_manual = parse_team_list(st.sidebar.text_input("B2B timovi (npr. DET, MEM, LAL)", placeholder="DET, BOS"))
 if b2b_teams_manual:
     st.sidebar.success(f"✅ B2B: {', '.join(sorted(b2b_teams_manual))}")
@@ -123,11 +124,12 @@ b2b_date_input = st.sidebar.text_input("Datum utakmice (YYYY-MM-DD)", value=TODA
 st.sidebar.markdown("---")
 st.sidebar.subheader("🏠 Home / Away & Rest Days")
 st.sidebar.caption("Upiši timove koji igraju na gostovanju (odvojeno zarezom)")
-away_teams_manual = parse_team_list(st.sidebar.text_input("Away timovi danas (npr. DET, PHI)",
+st.sidebar.caption("Domaćin/gost i dani odmora se čitaju automatski iz ESPN rasporeda; ručni unos ima prednost")
+away_teams_manual = parse_team_list(st.sidebar.text_input("Away timovi danas — ispravke (npr. DET, PHI)",
                                                           placeholder="DET, PHI", key="away_teams_input"))
 if away_teams_manual:
     st.sidebar.success(f"✅ Away: {', '.join(sorted(away_teams_manual))}")
-st.sidebar.caption("Rest Days — dani odmora po timu (format: TIM=DANI, npr. OKC=3, MIN=2)")
+st.sidebar.caption("Rest Days — ispravke po timu (format: TIM=DANI, npr. OKC=3, MIN=2)")
 rest_days_map = parse_rest_days(st.sidebar.text_input("Rest days po timu", placeholder="OKC=3, MIN=2, CLE=1",
                                                       key="rest_days_input"))
 if rest_days_map:
@@ -292,7 +294,10 @@ with st.expander("🔍 DEBUG DATA — status svih izvora"):
 # NBA raspored — danas + sutra (ESPN)
 # =====================================================
 
-_game_statuses = _game_statuses_cached(TODAY_ISO) or {}
+_schedule_ctx = _schedule_cached(TODAY_ISO)
+_game_statuses = _schedule_ctx.statuses if _schedule_ctx is not None else {}
+if _schedule_ctx is None or not _schedule_ctx.fetched:
+    st.caption("ℹ️ ESPN raspored nije dostupan: domaćin/gost, B2B i odmor rade samo iz ručnog unosa, svježina ponude se ne provjerava.")
 if _game_statuses:
     _today_games = games_for_date(_game_statuses, TODAY.strftime("%Y%m%d"))
     _tomorrow_games = games_for_date(_game_statuses, (TODAY + datetime.timedelta(days=1)).strftime("%Y%m%d"))
@@ -351,7 +356,7 @@ options = AnalysisOptions(
     mc_sims=int(mc_sims), min_ev=float(min_ev), only_positive=bool(show_only_positive),
     recent_form_override=recent_form_override, b2b_teams_manual=b2b_teams_manual,
     b2b_date=b2b_date_input, away_teams_manual=away_teams_manual, rest_days_map=rest_days_map,
-    injury_override=injury_override_df, game_statuses=_game_statuses,
+    injury_override=injury_override_df, game_statuses=_game_statuses, schedule=_schedule_ctx,
 )
 with st.spinner("Računam projekcije i Monte Carlo..."):
     result = run_analysis(offer_text, bundle, options)
@@ -375,6 +380,20 @@ if result.skipped_active:
     st.warning(f"⏭️ Preskočeno {len(result.skipped_active)} igrača — " + ", ".join(_msg))
     with st.expander("📋 Preskočeni igrači (meč počeo ili završio)"):
         st.dataframe(_skip_df, **WIDE_DF)
+
+# Svježina ponude: parovi iz ponude moraju biti današnji mečevi po ESPN rasporedu
+if result.offer_is_today is False:
+    st.error(f"🛑 **Ponuda nije za današnje mečeve.** Nijedan od {result.offer_matched_rows} parova iz ponude nije u današnjem "
+             f"ESPN rasporedu ({result.auto_context.get('games_today', 0)} mečeva danas). Brojke ispod nisu upotrebljive i "
+             "istorija se ne snima. Povuci novu ponudu (korak „ponuda“ ili upload).")
+elif result.offer_is_today and result.offer_today_matches < result.offer_matched_rows:
+    st.warning(f"⚠️ {result.offer_matched_rows - result.offer_today_matches} od {result.offer_matched_rows} redova ponude nije među današnjim mečevima.")
+if result.auto_context:
+    st.caption("🏠 Automatski iz ESPN rasporeda — " + format_auto_context(result.auto_context))
+if result.excluded_out:
+    st.warning(f"⛔ {len(result.excluded_out)} igrača isključeno iz rangiranja — status OUT (opklada bi bila poništena)")
+    with st.expander("⛔ Isključeni igrači (OUT)"):
+        st.dataframe(pd.DataFrame(result.excluded_out), **WIDE_DF)
 
 if not result.ok:
     st.error(result.message)
@@ -483,7 +502,9 @@ if actual_results_df is not None and second_model_uploaded is not None:
 # =====================================================
 
 _fp = analysis_fingerprint(df)
-if st.session_state.get("last_history_fp") != _fp:
+if result.offer_is_today is False:
+    st.caption("Istorija nije snimljena: ponuda nije za današnje mečeve.")
+elif st.session_state.get("last_history_fp") != _fp:
     _ts = timestamp_now()
     try:
         _hist_path = save_analysis(df, settings.history_dir, _ts)

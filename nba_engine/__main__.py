@@ -71,7 +71,7 @@ def cmd_check(args) -> int:
 def cmd_analyze(args) -> int:
     from .loaders import MissingDataError, load_bundle
     from .offer import read_offer_file
-    from .pipeline import AnalysisOptions, run_analysis, summary_table
+    from .pipeline import AnalysisOptions, format_auto_context, run_analysis, summary_table
     from .history import save_analysis
 
     settings = _settings_from_args(args)
@@ -85,13 +85,13 @@ def cmd_analyze(args) -> int:
         print("❌ Nema fajla ponude. Pokreni: python -m nba_engine fetch-offer  (ili zadaj --offer PUTANJA)")
         return 1
 
-    statuses = {}
+    schedule_ctx = None
     if not args.no_schedule:
-        from .schedule import fetch_game_statuses
-        statuses = fetch_game_statuses()
+        from .schedule import fetch_schedule_context
+        schedule_ctx = fetch_schedule_context()
 
     options = AnalysisOptions(mc_sims=args.mc_sims, min_ev=args.min_ev, only_positive=args.only_positive,
-                              game_statuses=statuses)
+                              game_statuses=schedule_ctx.statuses if schedule_ctx else {}, schedule=schedule_ctx)
     result = run_analysis(read_offer_file(offer_path), bundle, options)
 
     print(f"Sezona {settings.season} | ponuda: {offer_path.name} | redova: {len(result.offer_rows)} "
@@ -99,6 +99,18 @@ def cmd_analyze(args) -> int:
           f"{len(result.skipped_active)}")
     for note in bundle.notes:
         print("ℹ️ ", note)
+    if result.offer_is_today is False:
+        print(f"🛑 Ponuda NIJE za današnje mečeve: 0 od {result.offer_matched_rows} parova iz ponude je u ESPN rasporedu "
+              f"(danas {result.auto_context.get('games_today', 0)} mečeva). Brojke ispod nisu upotrebljive; istorija se ne snima.")
+    elif result.offer_is_today is None and not args.no_schedule:
+        print("ℹ️  ESPN raspored nije dostupan — svježina ponude nije provjerena.")
+    elif result.offer_is_today and result.offer_today_matches < result.offer_matched_rows:
+        print(f"⚠️  {result.offer_matched_rows - result.offer_today_matches} od {result.offer_matched_rows} redova ponude nije među današnjim mečevima.")
+    if result.auto_context:
+        print("🏠 Automatski iz ESPN rasporeda — " + format_auto_context(result.auto_context))
+    if result.excluded_out:
+        print(f"⛔ Isključeno iz rangiranja, status OUT (opklada bi bila poništena): " + ", ".join(
+            f"{e['Player']} ({e['Team']})" for e in result.excluded_out))
     if not result.ok:
         print(f"❌ {result.message}")
         if result.not_found:
@@ -130,8 +142,11 @@ def cmd_analyze(args) -> int:
         result.df.to_csv(args.out, index=False)
         print(f"\n💾 Puna tabela: {args.out}")
     if not args.no_history:
-        path = save_analysis(result.df, settings.history_dir)
-        print(f"💾 Istorija: {path}")
+        if result.offer_is_today is False:
+            print("ℹ️  Istorija nije snimljena: ponuda nije za danas.")
+        else:
+            path = save_analysis(result.df, settings.history_dir)
+            print(f"💾 Istorija: {path}")
     return 0
 
 

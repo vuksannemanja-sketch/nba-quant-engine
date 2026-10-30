@@ -233,6 +233,7 @@ def build_player_context(
 
     injury_boost = direct_player_penalty = 1.0
     injured_usage_lost = injured_minutes_lost = 0.0
+    self_status = None  # status samog igrača na listi ozljeda (OUT, QUESTIONABLE...), None ako nije na listi
 
     if inj_df is not None and team_abbr:
         team_inj = inj_df[inj_df["TEAM_ABBR"].astype(str).str.upper() == str(team_abbr).upper()].copy()
@@ -620,6 +621,7 @@ def build_player_context(
         "team_eff_matchup": team_eff_matchup, "opp_def": opp_def,
         "total_factor": total_factor, "injury_boost": injury_boost,
         "direct_player_penalty": direct_player_penalty,
+        "injury_status": self_status,
         "usage_factor": usage_factor, "shot_factor": shot_factor,
         "ft_factor": ft_factor, "efficiency_factor": efficiency_factor,
         "playmaking_factor": playmaking_factor, "turnover_factor": turnover_factor,
