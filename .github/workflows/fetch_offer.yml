@@ -2,7 +2,9 @@ name: Fetch NBA Offer
 
 # Svaki dan povlači dnevnu ponudu (player points) sa The Odds API i upisuje je u data/offer_latest.csv.
 # Ključ se čita iz GitHub Secrets (Settings → Secrets and variables → Actions → ODDS_API_KEY).
-# Bez postavljenog ključa korak se preskače i robot ništa ne mijenja.
+# Bez postavljenog ključa koraci se preskaču i robot ništa ne mijenja.
+# Napomena: GitHub ne dozvoljava `secrets` u `if:` uslovu koraka, zato se prisustvo
+# ključa računa u env promjenljivu HAS_ODDS_KEY na nivou posla.
 
 on:
   schedule:
@@ -20,30 +22,35 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      HAS_ODDS_KEY: ${{ secrets.ODDS_API_KEY != '' }}
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: env.HAS_ODDS_KEY == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
+        if: env.HAS_ODDS_KEY == 'true'
         run: pip install pandas numpy requests
 
       - name: Fetch today's offer
-        if: ${{ secrets.ODDS_API_KEY != '' }}
+        if: env.HAS_ODDS_KEY == 'true'
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: python -m nba_engine fetch-offer
 
       - name: Skip (no API key configured)
-        if: ${{ secrets.ODDS_API_KEY == '' }}
+        if: env.HAS_ODDS_KEY != 'true'
         run: echo "ODDS_API_KEY secret nije postavljen - preskačem."
 
       - name: Commit and push offer file
+        if: env.HAS_ODDS_KEY == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
