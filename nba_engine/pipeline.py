@@ -254,15 +254,23 @@ def _resolve_rest_days(team: str, options: AnalysisOptions) -> int:
     return 2
 
 
-def offer_freshness(pairs: List[Tuple[str, str]], sched: Optional[ScheduleContext]) -> Tuple[Optional[bool], int]:
-    """(da li je ponuda za danas, broj parova koji su današnji mečevi). None kad raspored nije dostupan."""
+FRESH_OFFER_MIN_SHARE = 0.5  # ponuda je „za danas“ ako je bar polovina njenih parova među današnjim mečevima
+
+
+def offer_freshness(pairs: List[Tuple[str, str]], sched: Optional[ScheduleContext],
+                    min_share: float = FRESH_OFFER_MIN_SHARE) -> Tuple[Optional[bool], int]:
+    """(da li je ponuda za danas, broj parova koji su današnji mečevi). None kad raspored nije dostupan.
+
+    Stara ponuda se zna slučajno poklopiti u jednom-dva para (isti timovi igraju opet), zato jedan pogodak
+    nije dovoljan: traži se udio od bar ``min_share`` (podrazumijevano polovina) parova.
+    """
     if sched is None or not sched.fetched or not pairs:
         return None, 0
     if any(o for _, o in pairs):
         matches = sum(1 for t, o in pairs if sched.pair_is_today(t, o))
     else:  # ponuda bez kolone protivnika: dovoljno je da tim igra danas
         matches = sum(1 for t, _ in pairs if t in sched.teams_today)
-    return matches > 0, matches
+    return matches / len(pairs) >= min_share, matches
 
 
 def auto_context(pairs: List[Tuple[str, str]], sched: Optional[ScheduleContext]) -> Dict[str, Any]:
