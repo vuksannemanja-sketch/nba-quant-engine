@@ -6,6 +6,8 @@ Komande:
   fetch-offer  povuci današnju ponudu sa The Odds API u data/offer_latest.csv
   settle       poravnaj snimljene analize sa stvarnim poenima (automatska evaluacija)
   refresh      osvježi CSV podatke (NBA Stats, ESPN, The Odds API)
+  daily        dnevni posao: refresh → settle → fetch-offer → analyze (→ --push na GitHub)
+  schedule     podesi/ukloni/provjeri dnevno pokretanje na ovom računaru (macOS launchd)
   check        provjeri podešavanja, podatke i zavisnosti
 """
 from __future__ import annotations
@@ -204,6 +206,51 @@ def cmd_settle(args) -> int:
     return 0
 
 
+def cmd_daily(args) -> int:
+    from .daily import run_daily
+    settings = _settings_from_args(args)
+    stages = [s.strip() for s in args.stages.split(",") if s.strip()] if args.stages else None
+    report = run_daily(settings, log=print, stages=stages, push=args.push, with_h2h=args.with_h2h,
+                       log_dir=Path(args.log_dir) if args.log_dir else None)
+    if report.log_path:
+        print(f"📝 Log: {report.log_path}")
+    return 0 if report.ok else 1
+
+
+def cmd_schedule(args) -> int:
+    from . import scheduler
+    if args.install:
+        try:
+            scheduler.install(hour=args.hour, minute=args.minute, push=not args.no_push, with_h2h=args.with_h2h,
+                              log=print)
+        except RuntimeError as e:
+            print(f"❌ {e}")
+            return 1
+        print("ℹ️  Računar mora biti uključen (ili da spava) u to vrijeme; ugašen računar preskače taj dan.")
+        print("ℹ️  Provjera: python -m nba_engine schedule --status   |   logovi: logs/")
+        return 0
+    if args.remove:
+        scheduler.remove(log=print)
+        return 0
+    if args.show:
+        print(scheduler.render_plist(Path(sys.executable), PROJECT_ROOT, args.hour, args.minute,
+                                     extra_args=scheduler.daily_args(not args.no_push, args.with_h2h)).decode())
+        print("# Linux (crontab -e):")
+        print(scheduler.cron_line(Path(sys.executable), PROJECT_ROOT, args.hour, args.minute,
+                                  scheduler.daily_args(not args.no_push, args.with_h2h)))
+        return 0
+    for line in scheduler.status_lines(scheduler.status()):
+        print(line)
+    from .daily import load_last_report
+    rep = load_last_report()
+    if rep:
+        print(f"🕒 Zadnji dnevni posao: {rep.get('started', '?')} — {'sve OK' if rep.get('ok') else 'bilo je grešaka'}")
+        for st in rep.get("stages", []):
+            icon = {"ok": "✅", "skipped": "⏭️", "failed": "❌"}.get(st.get("status"), "❔")
+            print(f"   {icon} {st.get('name')}: {st.get('message')}")
+    return 0
+
+
 def cmd_ui(args) -> int:
     app_path = PROJECT_ROOT / "app.py"
     cmd = [sys.executable, "-m", "streamlit", "run", str(app_path), "--server.port", str(args.port)]
@@ -275,6 +322,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("check", parents=[common], help="provjeri podešavanja i podatke")
     s.set_defaults(func=cmd_check)
+
+    s = sub.add_parser("daily", parents=[common],
+                       help="dnevni posao: refresh → settle → fetch-offer → analyze (→ --push)")
+    s.add_argument("--push", action="store_true", help="na kraju commit-uj data/*.csv i pošalji na GitHub (grana main)")
+    s.add_argument("--with-h2h", action="store_true", help="uključi i spori H2H korak u osvježavanju")
+    s.add_argument("--stages", help="samo odabrane faze, odvojene zarezom: refresh,settle,offer,analyze,push")
+    s.add_argument("--log-dir", help="folder za logove (podrazumijevano: logs/)")
+    s.add_argument("--history-dir", help="folder istorije (podrazumijevano: history/)")
+    s.set_defaults(func=cmd_daily)
+
+    s = sub.add_parser("schedule", parents=[common],
+                       help="dnevno pokretanje na ovom računaru (macOS launchd): --install / --remove / --status")
+    g = s.add_mutually_exclusive_group()
+    g.add_argument("--install", action="store_true", help="podesi (ili zamijeni) dnevni posao")
+    g.add_argument("--remove", action="store_true", help="ukloni dnevni posao")
+    g.add_argument("--status", action="store_true", help="prikaži stanje (podrazumijevano)")
+    g.add_argument("--show", action="store_true", help="samo ispiši plist i cron liniju, ništa ne mijenjaj")
+    s.add_argument("--hour", type=int, default=18, help="sat pokretanja, 0–23 (podrazumijevano 18)")
+    s.add_argument("--minute", type=int, default=0, help="minut pokretanja (podrazumijevano 0)")
+    s.add_argument("--no-push", action="store_true", help="dnevni posao bez slanja podataka na GitHub")
+    s.add_argument("--with-h2h", action="store_true", help="dnevni posao sa H2H korakom")
+    s.set_defaults(func=cmd_schedule)
 
     s = sub.add_parser("settle", parents=[common],
                        help="poravnaj snimljene analize sa stvarnim poenima (automatska evaluacija)")

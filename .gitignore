@@ -21,3 +21,6 @@ history/
 # Streamlit 1.66+ sam pravi ove foldere (agent skills) pri pokretanju
 .agents/
 .claude/skills/
+
+# Dnevni posao (python -m nba_engine daily) piše logove ovdje
+logs/

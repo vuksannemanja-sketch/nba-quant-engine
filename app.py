@@ -22,6 +22,8 @@ from nba_engine.offer import (offer_rows_to_frame, parse_injury_override, parse_
                               parse_rest_days, parse_team_list, read_offer_file)
 from nba_engine.pipeline import MC_SIMS_CHOICES, AnalysisOptions, format_auto_context, run_analysis
 from nba_engine.refresh import ALL_STEPS, DEFAULT_STEPS, STEP_LABELS, run_refresh
+from nba_engine.daily import load_last_report
+from nba_engine import scheduler as _scheduler
 from nba_engine.schedule import STATE_ICON, fetch_schedule_context, games_for_date
 from nba_engine.settle import load_all_settled, load_ledger, overall_summary, settle_history
 from nba_engine.utils import normalize_name, smart_decode
@@ -55,6 +57,14 @@ def _data_stamp(s: Settings) -> tuple:
 @st.cache_data(ttl=3600, show_spinner="Učitavam CSV podatke...")
 def _load_bundle_cached(data_dir: str, season: str, fill_injury_team: bool, blend_prior: bool, stamp: tuple) -> DataBundle:
     return load_bundle(Settings.load(data_dir=data_dir, season=season), fill_injury_team, blend_prior_season=blend_prior)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _scheduler_status_cached(today_iso: str) -> dict:
+    try:
+        return _scheduler.status()
+    except Exception:  # noqa: BLE001 — launchctl nema (npr. Linux) → samo prikaz
+        return {"installed": _scheduler.plist_path().exists(), "loaded": False, "schedule": None}
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -209,6 +219,26 @@ if run_daily or _refresh_btn:
         st.cache_data.clear()
         if _report.ok:
             st.rerun()
+
+# ── Dnevni posao (automatski, launchd) ───────────────────────
+st.sidebar.markdown("---")
+with st.sidebar.expander("🕒 Dnevni posao (automatski)", expanded=False):
+    _sched = _scheduler_status_cached(TODAY_ISO)
+    if _sched.get("installed"):
+        st.caption(f"⏰ Podešen: svaki dan u {_sched.get('schedule') or '?'}"
+                   + ("" if _sched.get("loaded") else " — ⚠️ nije registrovan kod launchd (ponovi --install)"))
+    else:
+        st.caption("Nije podešen. U terminalu: `python -m nba_engine schedule --install`")
+    _last = load_last_report()
+    if _last:
+        _when = str(_last.get("started", ""))[:16].replace("T", " ")
+        (st.success if _last.get("ok") else st.warning)(
+            f"Zadnji put: {_when} — {'sve OK' if _last.get('ok') else 'bilo je grešaka'}")
+        for _st in _last.get("stages", []):
+            _icon = {"ok": "✅", "skipped": "⏭️", "failed": "❌"}.get(_st.get("status"), "❔")
+            st.caption(f"{_icon} {_st.get('name')}: {_st.get('message')}")
+    else:
+        st.caption("Još nije bilo dnevnog posla (logs/ je prazan).")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📦 Data status")
