@@ -70,8 +70,16 @@ def test_schedule_context_drives_home_away_b2b_and_rest(bundle, offer_text):
     r = res.df[res.df["Player"] == player].iloc[0]
     assert not r["Is Home"] and r["B2B Team"] and r["Rest Days"] == 0
     assert r["Home/Away Factor"] == 0.975 and r["B2B Factor"] < 1.0
-    assert res.offer_is_today is True and res.offer_today_matches >= 1
+    # samo jedan meč iz ponude je „danas“ → ponuda kao cjelina nije svježa (pravilo polovine), ali raspored važi
+    assert res.offer_today_matches >= 1 and res.offer_is_today is (res.offer_today_matches * 2 >= res.offer_matched_rows)
     assert team in res.auto_context["away"] and team in res.auto_context["b2b"]
+    full = _ctx_for(team, opp, today, 1)
+    for t, o in zip(base.df["TEAM_ABBR"], base.df["OPP_TEAM"]):
+        if t and o and t not in full.opponent_today and o not in full.opponent_today:
+            full.games_today.append((o, t)); full.home_teams.add(o); full.away_teams.add(t)
+            full.opponent_today.update({t: o, o: t})
+    res_full = run_analysis(offer_text, bundle, AnalysisOptions(schedule=full, **FAST))
+    assert res_full.offer_is_today is True and res_full.offer_today_matches == res_full.offer_matched_rows
     assert "B2B" in format_auto_context(res.auto_context)
 
     # domaćin + igrao prije 3 dana → 2 dana odmora
@@ -104,5 +112,8 @@ def test_offer_freshness_helpers_pure():
     assert offer_freshness([("OKC", "LAL"), ("BOS", "MIA")], ctx) == (True, 1)
     assert offer_freshness([("BOS", "MIA")], ctx) == (False, 0)
     assert offer_freshness([("OKC", ""), ("BOS", "")], ctx) == (True, 1)      # ponuda bez protivnika: tim igra danas
+    # slučajno poklapanje jednog para u staroj ponudi nije dovoljno (traži se bar polovina parova)
+    assert offer_freshness([("OKC", "LAL"), ("BOS", "MIA"), ("DET", "CHI"), ("PHX", "DEN")], ctx) == (False, 1)
+    assert offer_freshness([("OKC", "LAL"), ("BOS", "MIA"), ("DET", "CHI")], ctx, min_share=0.3) == (True, 1)
     assert offer_freshness([], ctx) == (None, 0) and offer_freshness([("OKC", "LAL")], None) == (None, 0)
     assert auto_context([("OKC", "LAL")], ctx)["away"] == ["OKC"] and format_auto_context({}) == ""

@@ -15,6 +15,8 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import requests
 
+from .teams import normalize_espn_abbr
+
 ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={date}"
 STATE_ICON = {"pre": "🕐", "in": "🔴 LIVE", "post": "✅ Final"}
 DEFAULT_DAYS_BACK = 6  # faktor odmora se ne mijenja poslije 5 dana, pa je 6 dana unazad dovoljno
@@ -38,7 +40,7 @@ def _event_teams(event: dict) -> Tuple[List[str], Optional[str], Optional[str]]:
     abbrs: List[str] = []
     home = away = None
     for c in comps:
-        abbr = str(c.get("team", {}).get("abbreviation", "")).upper()
+        abbr = normalize_espn_abbr(c.get("team", {}).get("abbreviation", ""))
         if not abbr:
             continue
         abbrs.append(abbr)

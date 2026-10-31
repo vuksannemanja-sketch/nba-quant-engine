@@ -1,5 +1,7 @@
 # NBA Quant Engine
 
+[![Tests](https://github.com/vuksannemanja-sketch/nba-quant-engine/actions/workflows/tests.yml/badge.svg)](https://github.com/vuksannemanja-sketch/nba-quant-engine/actions/workflows/tests.yml)
+
 Aplikacija za dnevnu analizu NBA „player points“ ponude: za svakog igrača iz ponude računa projekciju poena,
 Monte Carlo vjerovatnoću za OVER/UNDER, očekivanu vrijednost (EV) i rangira pickove.
 Sadrži i ocjenu modela na stvarnim rezultatima.
@@ -33,6 +35,8 @@ python -m nba_engine ui
 | `python -m nba_engine fetch-offer` | povlači današnju ponudu sa The Odds API u `data/offer_latest.csv` |
 | `python -m nba_engine refresh` | osvježava CSV podatke: ponuda, igrači/timovi, ozljede, matchup + forma, raspored (H2H uz `--with-h2h`) |
 | `python -m nba_engine check` | provjera podešavanja, podataka i biblioteka |
+| `python -m nba_engine daily` | dnevni posao u jednom potezu: refresh → settle → fetch-offer → analyze (uz `--push` i slanje podataka na GitHub) |
+| `python -m nba_engine schedule --install` | podešava da se `daily` sam pokreće svaki dan na ovom računaru (macOS launchd); `--status`, `--remove` |
 
 Korisne opcije: `analyze --offer PUTANJA --top 20 --min-ev 5 --only-positive --no-schedule`,
 `refresh --steps players,injuries` (samo odabrani koraci), `--season 2026-27`, `--data-dir /drugi/folder`.
@@ -91,6 +95,46 @@ Pravila: računa se samo OVER/UNDER (NO VALUE nije opklada); igrač koji nije ig
 
 Preporuka: dvije do tri sedmice samo snimati i poravnavati, bez uplata, pa tek onda zaključivati o modelu.
 
+## Dnevni posao i automatsko pokretanje
+
+Sve što treba uraditi jednom dnevno stoji u jednoj komandi:
+
+```bash
+python -m nba_engine daily          # refresh → settle → fetch-offer → analyze
+python -m nba_engine daily --push   # isto + commit i slanje osvježenih data/*.csv na GitHub (grana main)
+```
+
+Faze idu redom i greška u jednoj ne zaustavlja ostale:
+
+1. **refresh** – igrači/timovi, ozljede, DEF/OFF matchup + forma, raspored (H2H uz `--with-h2h`);
+2. **settle** – poravnanje ranijih analiza sa stvarnim poenima (evaluacija);
+3. **offer** – današnja ponuda sa The Odds API (preskače se ako `ODDS_API_KEY` nije u `.env`);
+4. **analyze** – analiza ponude i snimanje u `history/`, ali samo ako je ponuda povučena danas (mlađa od 20 h)
+   i ako je bar polovina njenih parova među današnjim mečevima po ESPN rasporedu;
+5. **push** (samo uz `--push`) – commit `data/*.csv` i slanje na GitHub. Radi samo sa grane `main`, odbija ako su
+   izmijenjeni i drugi fajlovi (kod), a pri sukobu sa GitHub-om zadržava lokalne (novije) podatke. Ako nema mreže,
+   commit ostaje lokalno i šalje se sutra.
+
+Svaki run piše `logs/daily_<datum>_<vrijeme>.log`, a rezime u `logs/daily_last_report.json`; aplikacija ga pokazuje
+u bočnoj traci („🕒 Dnevni posao“). Čuva se zadnjih 60 logova.
+
+**Automatsko pokretanje na ovom računaru (macOS):**
+
+```bash
+python -m nba_engine schedule --install            # svaki dan u 18:00, sa --push
+python -m nba_engine schedule --install --hour 19  # drugo vrijeme; --no-push bez slanja na GitHub
+python -m nba_engine schedule --status             # da li je podešen i kako je prošao zadnji run
+python -m nba_engine schedule --remove             # ukloni
+```
+
+Podešavanje se upisuje u `~/Library/LaunchAgents/com.nba-engine.daily.plist` i koristi Python iz `.venv` ovog
+foldera. Računar mora biti uključen ili da spava u to vrijeme (po buđenju posao kreće odmah); ugašen računar
+preskače taj dan. Zašto lokalno a ne na GitHub-u: NBA Stats server često odbija zahtjeve sa servera u oblaku,
+pa osvježavanje podataka radi pouzdano samo sa kućnog računara. Na Linuxu `schedule --show` ispisuje cron liniju.
+
+Za potpunu automatsku evaluaciju treba samo jedno: ključ The Odds API u `.env` na ovom računaru. Od tada se svaki
+dan snima analiza, a sutradan poravnava sa stvarnim poenima.
+
 ## Ulazi modela iz grupe B (uključeni, mogu se isključiti)
 
 Formule su iste kao u starom `app.py`; mijenjaju se samo ulazi. Sva tri prekidača su u bočnoj traci
@@ -117,8 +161,9 @@ Under među kladionicama koje nude **istu** liniju (detalji po kladionici u `dat
 - **Igrači sa statusom OUT/INACTIVE** (iz tabele ozljeda ili ručnog injury overridea) ne ulaze u rangiranje, jer
   kladionica opkladu na igrača koji ne igra poništava. Prikazani su posebno („⛔ Isključeni igrači“).
   Komandna linija: isto; u kodu se može ugasiti sa `AnalysisOptions(exclude_out=False)`.
-- **Svježina ponude**: ako nijedan par tim–protivnik iz ponude nije današnji meč po ESPN rasporedu, aplikacija
-  prikazuje crveno upozorenje, a analiza se **ne snima** u `history/`. Bez rasporeda provjera se preskače.
+- **Svježina ponude**: ako je manje od polovine parova tim–protivnik iz ponude među današnjim mečevima po ESPN
+  rasporedu, aplikacija prikazuje crveno upozorenje, a analiza se **ne snima** u `history/` (jedan slučajno poklopljen
+  par iz stare ponude nije dovoljan). Bez rasporeda provjera se preskače.
 
 ## Kako aplikacija računa (ukratko)
 
@@ -141,6 +186,9 @@ Formule su identične originalnom `app.py` (provjereno regresionim testom, vidi 
 .venv/bin/python -m pytest
 ```
 
+Isti testovi se sami pokreću na GitHub-u pri svakom pull requestu i svakoj izmjeni na `main`
+(`.github/workflows/tests.yml`, Python 3.11 i 3.12). Testovi ne koriste mrežu.
+
 - jedinični testovi: parsiranje ponude, normalizacija imena/timova, formule, evaluacija, konfiguracija, osvježavanje (čiste funkcije);
 - testovi na stvarnim podacima iz `data/`;
 - **regresija**: `tests/fixtures/legacy_full_portfolio.csv` je izlaz starog `app.py` na istim podacima;
@@ -162,22 +210,36 @@ nba_engine/
   history.py            snimanje rezultata
   odds_api.py           The Odds API (ponuda)
   refresh/              osvježavanje: players, injuries, matchups, schedule, h2h
+  settle.py             automatska evaluacija (poravnanje sa stvarnim poenima)
+  prior.py              dopuna rane sezone prošlom sezonom
+  daily.py              dnevni posao (sve faze redom, log, slanje na GitHub)
+  scheduler.py          dnevno pokretanje na računaru (macOS launchd)
   __main__.py           komandna linija
 tests/                  pytest
 data/                   CSV podaci (ulaz)
 history/                rezultati analiza (izlaz, nije u gitu)
+logs/                   logovi dnevnog posla (nije u gitu)
 archive/                stari kod (ne koristi se) — vidi archive/README.md
 ```
 
-## GitHub robot (Actions)
+## GitHub roboti (Actions)
 
-`.github/workflows/fetch_offer.yml` svaki dan u 19:00 povlači ponudu u `data/offer_latest.csv`.
-Radi samo ako je u GitHub repou postavljen secret `ODDS_API_KEY` (Settings → Secrets and variables → Actions);
-bez njega korak se preskače.
+- `.github/workflows/tests.yml` – pri svakom pull requestu i izmjeni na `main` instalira zavisnosti i pokreće testove.
+- `.github/workflows/fetch_offer.yml` – svaki dan u 17:00 UTC (18:00 zimi / 19:00 ljeti) povlači ponudu u
+  `data/offer_latest.csv`. Radi samo ako je u GitHub repou postavljen secret `ODDS_API_KEY`
+  (Settings → Secrets and variables → Actions); bez njega korak se preskače. Ovo je rezerva za dane kad je kućni
+  računar ugašen; glavni put je dnevni posao na računaru (vidi gore).
 
 ## Napomene
 
-- Podaci u `data/` su iz sezone 2025-26 (mart 2026). Za novu sezonu pokreni `refresh`.
+- Podaci u `data/` su za tekuću sezonu (dnevni posao ih osvježava); fajlovi sezone 2025-26 ostaju zbog testova
+  i dopune rane sezone.
 - `nba_api` povlači sa NBA Stats servera koji povremeno odbija zahtjeve; koraci se ponavljaju do 3 puta,
   a greška u jednom koraku ne zaustavlja ostale.
 - Codespaces/devcontainer: `.devcontainer/devcontainer.json` instalira zavisnosti i pokreće aplikaciju.
+- Verzije biblioteka su fiksirane u `requirements.txt` (streamlit, pandas, numpy, requests, nba_api, pytest), da se
+  aplikacija ponaša isto i poslije godinu dana. Nadogradnja: promijeni verziju, `pip install -r requirements.txt`,
+  pokreni testove, pa commit.
+- Ako je Python instaliran preko Homebrew-a, njegova nadogradnja može pokvariti `.venv` (dnevni posao počne javljati
+  grešku). Popravka: `rm -rf .venv && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`, pa
+  `python -m nba_engine schedule --install` ponovo.
