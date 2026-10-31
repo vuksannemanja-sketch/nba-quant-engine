@@ -15,7 +15,7 @@ import pandas as pd
 import requests
 
 from ..config import Settings
-from ..teams import ESPN_TEAM_IDS, TEAM_NAME_TO_ABBR
+from ..teams import ESPN_TEAM_IDS, TEAM_NAME_TO_ABBR, normalize_espn_abbr
 from ._nba import Logger, log_to
 
 REQUEST_TIMEOUT = 15
@@ -75,7 +75,7 @@ def normalize_status(raw: str) -> str:
 
 
 def _team_abbr_from_entry(team_info: dict, entry: dict) -> str:
-    abbr = str(team_info.get("abbreviation") or "").upper()
+    abbr = normalize_espn_abbr(team_info.get("abbreviation"))
     if abbr:
         return abbr
     for key in ("displayName", "name", "shortDisplayName"):

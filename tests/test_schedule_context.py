@@ -87,3 +87,15 @@ def test_fetch_schedule_context_window_and_failures():
     # kad ESPN ne radi za današnji dan → nepoznato
     ctx2 = fetch_schedule_context(today=TODAY, session=_FakeHTTP({}, fail={"20261030"}))
     assert not ctx2.fetched and isinstance(ctx2, ScheduleContext)
+
+
+def test_espn_abbreviations_are_normalized_to_app_codes():
+    """ESPN piše SA/NO/UTAH/GS/NY/WSH; aplikacija koristi SAS/NOP/UTA/GSW/NYK/WAS."""
+    events = {"20261030": [_ev("SA", "UTAH"), _ev("NO", "GS"), _ev("NY", "WSH")],
+              "20261029": [_ev("SA", "LAL", state="post", detail="Final")]}
+    ctx = build_schedule_context(events, TODAY)
+    assert set(ctx.games_today) == {("SAS", "UTA"), ("NOP", "GSW"), ("NYK", "WAS")}
+    assert ctx.pair_is_today("UTA", "SAS") and ctx.is_b2b("SAS") and ctx.rest_days("UTA") == DEFAULT_DAYS_BACK
+    assert "SA" not in ctx.teams_today and "UTAH" not in ctx.teams_today
+    st = statuses_from_events({"20261030": events["20261030"]})
+    assert {"SAS", "UTA", "NOP", "GSW", "NYK", "WAS"} <= set(st) and st["SAS"]["opponent"] == "UTA"

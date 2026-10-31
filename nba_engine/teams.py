@@ -51,6 +51,16 @@ ESPN_TEAM_IDS: Dict[str, str] = {
 }
 
 
+# ESPN koristi drugačije kratice za šest timova; sve ostalo je isto kao kod NBA Stats.
+ESPN_ABBR_ALIASES: Dict[str, str] = {"SA": "SAS", "NO": "NOP", "UTAH": "UTA", "GS": "GSW", "NY": "NYK", "WSH": "WAS"}
+
+
+def normalize_espn_abbr(abbr: Any) -> str:
+    """ESPN kratica → kratica koju koristi aplikacija (npr. 'SA' → 'SAS'); nepoznato ostaje kako jeste."""
+    s = str(abbr or "").strip().upper()
+    return ESPN_ABBR_ALIASES.get(s, s)
+
+
 def normalize_team_abbr(val: Any) -> Any:
     """Vrati kraticu tima (npr. 'BOS') iz kratice, numeričkog ID-a ili punog imena; inače NaN."""
     try:
