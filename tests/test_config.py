@@ -47,3 +47,13 @@ def test_env_file_parsing_and_settings(tmp_path, monkeypatch):
     os.environ["ODDS_API_KEY"] = "keep"
     load_dotenv(env)
     assert os.environ["ODDS_API_KEY"] == "keep"
+
+
+def test_odds_regions_default_and_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("ODDS_REGIONS", raising=False)
+    s = Settings.load(data_dir=tmp_path, season="2026-27", env_file=tmp_path / "no.env")
+    assert s.odds_regions == "us,eu"
+    monkeypatch.setenv("ODDS_REGIONS", " US , eu,")
+    assert Settings.load(data_dir=tmp_path, season="2026-27", env_file=tmp_path / "no.env").odds_regions == "us,eu"
+    monkeypatch.setenv("ODDS_REGIONS", "us")
+    assert Settings.load(data_dir=tmp_path, season="2026-27", env_file=tmp_path / "no.env").odds_regions == "us"

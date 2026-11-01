@@ -78,6 +78,23 @@ def select_events_for_game_date(events: Sequence[dict], game_date: _dt.date) -> 
     return kept, skipped
 
 
+def quota_warning(remaining, spent_today: int, today: _dt.date) -> Optional[str]:
+    """Upozorenje kad preostala kvota ne pokriva ostatak mjeseca uz današnju potrošnju (kvota se obnavlja mjesečno)."""
+    try:
+        rem = int(float(remaining))
+    except (TypeError, ValueError):
+        return None
+    if spent_today <= 0:
+        return None
+    next_month = (today.replace(day=28) + _dt.timedelta(days=4)).replace(day=1)
+    days_left = max((next_month - today).days - 1, 0)
+    need = days_left * spent_today
+    if rem < need:
+        return (f"API kvota: preostalo {rem}, a do kraja mjeseca uz {spent_today}/dan treba još ~{need}. "
+                f"Dovoljno za ~{rem // spent_today} dana — razmisli o manje regija (ODDS_REGIONS=us) ili plaćenom paketu.")
+    return None
+
+
 def event_has_player_points(data) -> bool:
     """Da li odgovor za meč uopšte sadrži player_points ishode (ako ne, ne vrijedi trošiti poziv za total)."""
     if not isinstance(data, dict):
@@ -95,7 +112,10 @@ class OddsApiClient:
     base_url: str = "https://api.the-odds-api.com/v4"
     timeout: int = 30
     http: object = requests
+    regions: str = "us,eu"          # regije za player props (1 zahtjev po regiji po meču)
     last_remaining: Optional[str] = None
+    last_used: Optional[str] = None
+    credits_spent: int = 0          # zbir x-requests-last u ovom pozivu/klijentu
 
     def _get(self, path: str, params: Dict[str, str]) -> object:
         if not self.api_key:
@@ -109,6 +129,8 @@ class OddsApiClient:
         resp.raise_for_status()
         try:
             self.last_remaining = resp.headers.get("x-requests-remaining")
+            self.last_used = resp.headers.get("x-requests-used")
+            self.credits_spent += int(float(resp.headers.get("x-requests-last") or 0))
         except Exception:
             pass
         return resp.json()
@@ -136,9 +158,30 @@ class OddsApiClient:
                             return outcome.get("point")
         return None
 
+    def fetch_all_totals(self) -> Dict[str, float]:
+        """Linije ukupnih poena za SVE predstojeće mečeve jednim zahtjevom (1 kredit ukupno, umjesto 1 po meču)."""
+        data = self._get(f"/sports/{SPORT_KEY}/odds", {"regions": "us", "markets": "totals", "oddsFormat": "decimal"})
+        totals: Dict[str, float] = {}
+        for ev in data if isinstance(data, list) else []:
+            ev_id = ev.get("id")
+            if not ev_id or ev_id in totals:
+                continue
+            for bookie in ev.get("bookmakers", []) or []:
+                for market in bookie.get("markets", []) or []:
+                    if market.get("key") == "totals":
+                        for outcome in market.get("outcomes", []) or []:
+                            if outcome.get("name") == "Over" and outcome.get("point") is not None:
+                                totals[ev_id] = float(outcome["point"])
+                                break
+                    if ev_id in totals:
+                        break
+                if ev_id in totals:
+                    break
+        return totals
+
     def fetch_event_player_points(self, event_id: str) -> dict:
         return self._get(f"/sports/{SPORT_KEY}/events/{event_id}/odds",
-                         {"regions": "us,eu,uk", "markets": "player_points", "oddsFormat": "decimal"})
+                         {"regions": self.regions, "markets": "player_points", "oddsFormat": "decimal"})
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +375,8 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
     u listi vraća i sutrašnje mečeve, a svaki poziv za kvote troši mjesečnu kvotu. Za meč bez player props
     ponude ne poziva se ni linija ukupnih poena.
     """
-    client = client or OddsApiClient(settings.odds_api_key, settings.odds_api_base)
+    client = client or OddsApiClient(settings.odds_api_key, settings.odds_api_base,
+                                     regions=getattr(settings, "odds_regions", "us,eu"))
     try:
         if players_df is None:
             players_df = load_players_for_lookup(settings)
@@ -357,13 +401,25 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
         else:
             log(f"📅 Utakmica u ponudi: {len(events)}")
 
+        totals_bulk: Optional[Dict[str, float]] = None
+        try:
+            totals_bulk = client.fetch_all_totals()
+        except OddsApiError:
+            raise
+        except Exception as e:  # noqa: BLE001 — rezerva: total po meču
+            log(f"⚠️ Totali jednim pozivom nisu uspjeli ({e}); uzimam po meču.")
+
         all_props: List[dict] = []
         for event in events:
             event_id = event.get("id")
             home_abbr = team_name_to_abbr(event.get("home_team", ""))
             away_abbr = team_name_to_abbr(event.get("away_team", ""))
             data = client.fetch_event_player_points(event_id)
-            total_match = client.fetch_game_totals(event_id) if event_has_player_points(data) else None
+            total_match = None
+            if event_has_player_points(data):
+                total_match = (totals_bulk or {}).get(event_id)
+                if total_match is None:
+                    total_match = client.fetch_game_totals(event_id)
             props = extract_player_props(data, home_abbr, away_abbr, total_match, players_df,
                                          settings.bookmaker_priority, log=log, best_odds=best_odds)
             log(f"🏀 {away_abbr} @ {home_abbr}: total={total_match}, igrača={len(props)}"
@@ -396,8 +452,13 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
             msg += f", kladionica po igraču prosj. {float(df_detail['N_BOOKS'].mean()):.1f}"
         if closing:
             msg += " (zatvorene linije za CLV)"
+        if client.credits_spent:
+            msg += f", potrošeno {client.credits_spent} zahtjeva"
         if client.last_remaining is not None:
             msg += f", preostalo API zahtjeva: {client.last_remaining}"
+            warn = quota_warning(client.last_remaining, client.credits_spent, today or _dt.date.today())
+            if warn:
+                log("⚠️ " + warn)
         log("✅ " + msg)
         return FetchResult(True, df, msg, paths, events=len(events), events_skipped=len(skipped))
     except OddsApiError as e:

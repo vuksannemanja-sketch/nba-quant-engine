@@ -25,6 +25,11 @@ ENV_DATA_DIR = "NBA_DATA_DIR"
 ENV_HISTORY_DIR = "NBA_HISTORY_DIR"
 ENV_ODDS_KEY = "ODDS_API_KEY"
 ENV_BOOKMAKERS = "ODDS_BOOKMAKERS"
+ENV_REGIONS = "ODDS_REGIONS"
+
+# Regije kladionica za The Odds API. Svaka regija košta 1 zahtjev po meču; "uk" ne nudi NBA player props
+# (izmjereno 1.11.2026), pa je podrazumijevano us+eu (Pinnacle je u "eu").
+DEFAULT_ODDS_REGIONS = "us,eu"
 
 # Redoslijed kladionica pri izboru linije (prva koja ima ponudu pobjeđuje).
 DEFAULT_BOOKMAKER_PRIORITY: Tuple[str, ...] = (
@@ -183,6 +188,7 @@ class Settings:
     history_dir: Path
     odds_api_key: str = ""
     bookmaker_priority: Tuple[str, ...] = DEFAULT_BOOKMAKER_PRIORITY
+    odds_regions: str = DEFAULT_ODDS_REGIONS
     season_source: str = "default"
     env_file: Optional[Path] = None
     odds_api_base: str = "https://api.the-odds-api.com/v4"
@@ -210,6 +216,8 @@ class Settings:
             history_dir=hdir,
             odds_api_key=os.environ.get(ENV_ODDS_KEY, "").strip(),
             bookmaker_priority=books,
+            odds_regions=",".join(r.strip().lower() for r in os.environ.get(ENV_REGIONS, "").split(",") if r.strip())
+            or DEFAULT_ODDS_REGIONS,
             season_source=source,
             env_file=env_path if env_path.exists() else None,
         )

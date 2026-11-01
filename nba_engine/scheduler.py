@@ -18,8 +18,10 @@ from typing import Callable, Dict, List, Optional, Sequence
 from .config import PROJECT_ROOT
 
 LABEL = "com.nba-engine.daily"
-DEFAULT_HOUR = 18
-DEFAULT_MINUTE = 0
+# 22:30 po srednjoevropskom = 16:30 u Americi: popodnevni izvještaj o povredama (13:00 ET) je vani, linije su slegle,
+# a prvi večernji mečevi počinju tek u 01:00. Vikend-mečevi koji počnu ranije se tog dana preskaču (u toku su).
+DEFAULT_HOUR = 22
+DEFAULT_MINUTE = 30
 LAUNCHD_PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 Logger = Callable[[str], None]
 
