@@ -610,13 +610,13 @@ elif st.session_state.get("last_history_fp") != _fp:
             st.caption(f"Saved history: {_hist_path.name}")
         except Exception as e:  # noqa: BLE001
             st.warning(f"Could not save history csv: {e}")
-st.caption("U ocjenu modela ulazi jedna analiza po danu: ona iz dnevnog posla (22:30). Ručne analize iz aplikacije se "
-           "čuvaju u history/, ali se ne ocjenjuju ako tog dana postoji analiza dnevnog posla.")
-    if actual_results_df is not None and evaluated_df is not None:
-        try:
-            _eval_path = save_evaluation(evaluated_df, settings.history_dir, _ts)
-            st.caption(f"Saved evaluation CSV: {_eval_path.name}")
-        except Exception as e:  # noqa: BLE001
-            st.warning(f"Could not save evaluation csv: {e}")
+        if actual_results_df is not None and evaluated_df is not None:
+            try:
+                _eval_path = save_evaluation(evaluated_df, settings.history_dir, _ts)
+                st.caption(f"Saved evaluation CSV: {_eval_path.name}")
+            except Exception as e:  # noqa: BLE001
+                st.warning(f"Could not save evaluation csv: {e}")
 else:
     st.caption(f"Istorija već snimljena: {st.session_state.get('last_history_file', '')}")
+st.caption("U ocjenu modela ulazi jedna analiza po danu: ona iz dnevnog posla (22:30). Ručne analize iz aplikacije se "
+           "čuvaju u history/, ali se ne ocjenjuju ako tog dana postoji analiza dnevnog posla.")
