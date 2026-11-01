@@ -90,7 +90,9 @@ i upiše:
 - `history/ledger.csv`: jedan red po analizi (pogodak %, profit, ROI, MAE, ocjena A–F) i zbir preko svega.
 
 Pravila: računa se samo OVER/UNDER (NO VALUE nije opklada); igrač koji nije igrao = VOID; analiza snimljena prije
-06:00 pripada prethodnom (američkom) danu; meč se traži po protivniku iz analize (±1 dan). Isto radi dugme
+06:00 pripada prethodnom (američkom) danu; meč se traži po protivniku iz analize (±1 dan). **Jedna analiza po danu**:
+zvanična je analiza dnevnog posla (fajl sa oznakom `_daily`), a ako je tog dana nema, zadnja snimljena; ostale analize
+istog dana dobijaju status „nije zvanična“ i ne ulaze u ledger. Aplikacija ne snima identične kopije istog rezultata. Isto radi dugme
 „🔄 Poravnaj nove analize“ u aplikaciji, gdje se vidi i zbirna ocjena. `settle --report` samo ispisuje stanje, bez mreže.
 
 Preporuka: dvije do tri sedmice samo snimati i poravnavati, bez uplata, pa tek onda zaključivati o modelu.

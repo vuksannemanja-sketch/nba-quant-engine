@@ -16,7 +16,7 @@ import streamlit as st
 from nba_engine.config import CSV_LABELS, Settings
 from nba_engine.evaluation import (compare_two_models, evaluate_engine, grade_engine,
                                    load_actual_results_csv, load_prediction_results_csv)
-from nba_engine.history import analysis_fingerprint, save_analysis, save_evaluation, timestamp_now
+from nba_engine.history import analysis_fingerprint, find_same_fingerprint, save_analysis, save_evaluation, timestamp_now
 from nba_engine.loaders import DataBundle, MissingDataError, load_bundle
 from nba_engine.offer import (offer_rows_to_frame, parse_injury_override, parse_recent_form_input,
                               parse_rest_days, parse_team_list, read_offer_file)
@@ -545,17 +545,18 @@ if actual_results_df is not None and second_model_uploaded is not None:
 
 st.markdown("---")
 st.subheader("📈 Automatska evaluacija — sve snimljene analize")
-st.caption("Svaka snimljena analiza se poslije odigranih mečeva poravnava sa stvarnim poenima iz NBA game loga. "
-           "Računa se samo OVER/UNDER; igrač koji nije igrao = VOID. Profit je u jedinicama uloga (1 po opkladi). "
-           "Ovo je jedini pravi pokazatelj koliko model vrijedi.")
+st.caption("Zvanična analiza svakog dana (iz dnevnog posla u 22:30; ako je nema, zadnja snimljena tog dana) se poslije "
+           "odigranih mečeva poravnava sa stvarnim poenima iz NBA game loga. Računa se samo OVER/UNDER; igrač koji nije "
+           "igrao = VOID. Profit je u jedinicama uloga (1 po opkladi). Ovo je jedini pravi pokazatelj koliko model vrijedi.")
 _sc1, _sc2 = st.columns([1, 3])
 if _sc1.button("🔄 Poravnaj nove analize", help="Povlači game log sa NBA Stats (10–20 s) i poravnava sve još neporavnate analize"):
     with st.spinner("Povlačim stvarne rezultate i poravnavam..."):
         _msgs: list = []
         try:
             _events = settle_history(settings.history_dir, stake=1.0, log=_msgs.append, closing_dir=settings.data_dir)
-            _n = {k: sum(1 for e in _events if e["status"] == k) for k in ("settled", "pending", "no_data", "error")}
-            _sc2.success(f"Poravnato: {_n['settled']} | čeka mečeve: {_n['pending']} | game log još nema datum: {_n['no_data']} | greške: {_n['error']}")
+            _n = {k: sum(1 for e in _events if e["status"] == k) for k in ("settled", "pending", "no_data", "error", "superseded")}
+            _sc2.success(f"Poravnato: {_n['settled']} | čeka mečeve: {_n['pending']} | game log još nema datum: {_n['no_data']} | "
+                         f"greške: {_n['error']} | nisu zvanične za svoj dan: {_n['superseded']}")
             for _m in _msgs:
                 st.caption(_m)
         except Exception as e:  # noqa: BLE001
@@ -596,14 +597,21 @@ _fp = analysis_fingerprint(df)
 if result.offer_is_today is False:
     st.caption("Istorija nije snimljena: ponuda nije za današnje mečeve.")
 elif st.session_state.get("last_history_fp") != _fp:
-    _ts = timestamp_now()
-    try:
-        _hist_path = save_analysis(df, settings.history_dir, _ts)
+    _dup = find_same_fingerprint(df, settings.history_dir)   # isti rezultat već snimljen danas (druga sesija/osvježenje)
+    if _dup is not None:
         st.session_state["last_history_fp"] = _fp
-        st.session_state["last_history_file"] = _hist_path.name
-        st.caption(f"Saved history: {_hist_path.name}")
-    except Exception as e:  # noqa: BLE001
-        st.warning(f"Could not save history csv: {e}")
+        st.caption(f"Istorija: isti rezultat je već snimljen ({_dup.name}).")
+    else:
+        _ts = timestamp_now()
+        try:
+            _hist_path = save_analysis(df, settings.history_dir, _ts)
+            st.session_state["last_history_fp"] = _fp
+            st.session_state["last_history_file"] = _hist_path.name
+            st.caption(f"Saved history: {_hist_path.name}")
+        except Exception as e:  # noqa: BLE001
+            st.warning(f"Could not save history csv: {e}")
+st.caption("U ocjenu modela ulazi jedna analiza po danu: ona iz dnevnog posla (22:30). Ručne analize iz aplikacije se "
+           "čuvaju u history/, ali se ne ocjenjuju ako tog dana postoji analiza dnevnog posla.")
     if actual_results_df is not None and evaluated_df is not None:
         try:
             _eval_path = save_evaluation(evaluated_df, settings.history_dir, _ts)

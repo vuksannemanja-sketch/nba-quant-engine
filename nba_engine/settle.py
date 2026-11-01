@@ -30,7 +30,7 @@ from .utils import normalize_name
 LEDGER_NAME = "ledger.csv"
 SETTLED_PREFIX = "settled_"
 US_DAY_CUTOFF_HOUR = 6          # analiza prije 06:00 lokalno → mečevi prethodnog američkog dana
-_ANALYSIS_RE = re.compile(r"analysis_(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})\.csv$")
+_ANALYSIS_RE = re.compile(r"analysis_(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})(?:_([A-Za-z0-9-]+))?\.csv$")
 _MATCHUP_RE = re.compile(r"^\s*([A-Z]{2,4})\s*(vs\.?|@)\s*([A-Z]{2,4})\s*$", re.IGNORECASE)
 
 ActualsProvider = Callable[[str], pd.DataFrame]   # sezona → tabela stvarnih poena
@@ -47,8 +47,24 @@ def analysis_datetime(path) -> Optional[_dt.datetime]:
     m = _ANALYSIS_RE.search(Path(path).name)
     if not m:
         return None
-    d, hh, mm, ss = m.groups()
+    d, hh, mm, ss = m.group(1), m.group(2), m.group(3), m.group(4)
     return _dt.datetime.strptime(f"{d} {hh}:{mm}:{ss}", "%Y-%m-%d %H:%M:%S")
+
+
+def official_analyses(paths) -> Dict[_dt.date, Path]:
+    """Jedna zvanična analiza po američkom danu mečeva: zadnja sa oznakom ``daily`` (dnevni posao),
+    a ako je taj dan nema — zadnja snimljena. Ostale analize tog dana se ne ocjenjuju (status 'superseded')."""
+    from .history import DAILY_TAG, analysis_tag
+    best: Dict[_dt.date, Tuple[int, _dt.datetime, Path]] = {}
+    for path in paths:
+        path = Path(path)
+        gdate, ts = game_date_for(path), analysis_datetime(path)
+        if gdate is None or ts is None:
+            continue
+        rank = (1 if analysis_tag(path) == DAILY_TAG else 0, ts, path)
+        if gdate not in best or rank[:2] > best[gdate][:2]:
+            best[gdate] = rank
+    return {d: r[2] for d, r in best.items()}
 
 
 def game_date_for(path) -> Optional[_dt.date]:
@@ -235,10 +251,16 @@ def settle_history(history_dir, provider: Optional[ActualsProvider] = None, toda
     say = log or (lambda s: None)
     events: List[Dict] = []
 
-    for path in list_history(history_dir):
+    paths = list_history(history_dir)
+    official = official_analyses(paths)
+    for path in paths:
         name = path.name
         gdate = game_date_for(path)
         if gdate is None:
+            continue
+        if official.get(gdate) is not None and official[gdate] != path:
+            events.append({"Analysis": name, "status": "superseded",
+                           "detail": f"nije zvanična analiza dana (zvanična: {official[gdate].name})"})
             continue
         if name in done and not force:
             continue
