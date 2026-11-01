@@ -5,7 +5,7 @@ import datetime as dt
 
 from nba_engine.odds_api import (OddsApiClient, OddsApiError, current_game_date, event_game_date,
                                  event_has_player_points, extract_player_props, fetch_daily_offer,
-                                 find_player_team, order_bookmakers, props_to_frame, select_events_for_game_date)
+                                 find_player_team, order_bookmakers, props_to_frame, quota_warning, select_events_for_game_date)
 from nba_engine.utils import normalize_name
 
 
@@ -57,8 +57,9 @@ def test_extract_props_skips_incomplete_and_empty():
 
 
 class _FakeResp:
-    def __init__(self, status, payload):
-        self.status_code, self._payload, self.headers = status, payload, {"x-requests-remaining": "42"}
+    def __init__(self, status, payload, cost="1"):
+        self.status_code, self._payload = status, payload
+        self.headers = {"x-requests-remaining": "42", "x-requests-used": "8", "x-requests-last": cost}
 
     def json(self):
         return self._payload
@@ -78,7 +79,7 @@ class _FakeHttp:
         # najduži ključ koji je sufiks URL-a (da /events ne uhvati /events/ev1/odds)
         for key in sorted(self.routes, key=len, reverse=True):
             if url.endswith(key):
-                return _FakeResp(self.status, self.routes[key])
+                return _FakeResp(self.status, self.routes[key], cost="0" if key == "/events" else "1")  # /events je besplatan
         return _FakeResp(404, {})
 
 
@@ -198,3 +199,54 @@ def test_fetch_daily_offer_skips_other_days_and_totals_without_props(tmp_path):
                              game_date=dt.date(2026, 11, 5))
     assert not res3.ok and "nema mečeva" in res3.message and res3.events_skipped == 3
     assert [u for u, _ in http3.calls] == ["/events"]
+
+
+def _bulk_totals_payload(event_totals):
+    return [{"id": ev_id, "bookmakers": [{"key": "fanduel", "markets": [{"key": "totals", "outcomes": [
+        {"name": "Over", "price": 1.9, "point": total}, {"name": "Under", "price": 1.9, "point": total}]}]}]}
+            for ev_id, total in event_totals.items()]
+
+
+def test_totals_come_from_one_bulk_call_and_regions_are_configurable(tmp_path, monkeypatch):
+    monkeypatch.setenv("ODDS_REGIONS", "us,eu")
+    settings = Settings.load(data_dir=tmp_path, season="2025-26", env_file=tmp_path / "no.env")
+    assert settings.odds_regions == "us,eu"
+    events = [{"id": "ev1", "home_team": "Detroit Pistons", "away_team": "Oklahoma City Thunder"},
+              {"id": "ev2", "home_team": "Boston Celtics", "away_team": "Miami Heat"}]
+    routes = {"/events": events,
+              "/odds": _bulk_totals_payload({"ev1": 221.5, "ev2": 230.0}),
+              "/events/ev1/odds": _event_payload([("pinnacle", [("Cade Cunningham", 27.5, 1.9, 1.85)])]),
+              "/events/ev2/odds": _event_payload([("pinnacle", [("Jalen Williams", 20.5, 1.9, 1.9)])])}
+    http = _FakeHttp(routes)
+    client = OddsApiClient("key", http=http, regions=settings.odds_regions)
+    res = fetch_daily_offer(settings, log=lambda m: None, players_df=_players(), client=client, only_today=False)
+    assert res.ok, res.message
+    assert [c for c in http.calls if c[1] == "totals"] == [("/odds", "totals")]          # jedan poziv za sve totale
+    assert sorted(res.df["TOTAL_MATCH"].tolist()) == [221.5, 230.0]
+    assert all(p == "player_points" for u, p in http.calls if u.startswith("/events/ev"))
+    assert client.credits_spent == 3 and "potrošeno 3 zahtjeva" in res.message             # 1 bulk + 2 × props (fake cost 1)
+    # regije iz klijenta idu u zahtjev
+    http.calls.clear()
+    client.fetch_event_player_points("ev1")
+    assert http.calls == [("/events/ev1/odds", "player_points")]
+
+
+def test_totals_fall_back_per_event_when_bulk_missing(tmp_path):
+    settings = Settings.load(data_dir=tmp_path, season="2025-26", env_file=tmp_path / "no.env")
+    events = [{"id": "ev1", "home_team": "Detroit Pistons", "away_team": "Oklahoma City Thunder"}]
+    routes = {"/events": events,
+              "/odds": _bulk_totals_payload({"drugi": 200.0}),           # bulk nema ovaj meč
+              "/events/ev1/odds": _event_payload([("pinnacle", [("Cade Cunningham", 27.5, 1.9, 1.85)])])}
+    http = _FakeHttp(routes)
+    res = fetch_daily_offer(settings, log=lambda m: None, players_df=_players(), client=OddsApiClient("key", http=http),
+                            only_today=False)
+    assert res.ok and ("/events/ev1/odds", "totals") in http.calls
+
+
+def test_quota_warning_when_remaining_does_not_cover_month():
+    import datetime as dt
+    assert quota_warning("472", 16, dt.date(2026, 11, 1)) is None                 # 29 dana × 16 = 464 < 472
+    w = quota_warning("472", 28, dt.date(2026, 11, 1))                            # 29 × 28 = 812 > 472
+    assert w and "~16 dana" in w and "ODDS_REGIONS" in w
+    assert quota_warning(None, 10, dt.date(2026, 11, 1)) is None and quota_warning("5", 0, dt.date(2026, 11, 1)) is None
+    assert quota_warning("10", 100, dt.date(2026, 11, 30)) is None                # zadnji dan mjeseca: ništa ne treba

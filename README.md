@@ -109,9 +109,10 @@ Faze idu redom i greška u jednoj ne zaustavlja ostale:
 1. **refresh** – igrači/timovi, ozljede, DEF/OFF matchup + forma, raspored (H2H uz `--with-h2h`);
 2. **settle** – poravnanje ranijih analiza sa stvarnim poenima (evaluacija);
 3. **offer** – današnja ponuda sa The Odds API (preskače se ako `ODDS_API_KEY` nije u `.env`). Kvote se traže samo
-   za mečeve današnjeg američkog dana, a za meč bez player props linija ne traži se ni total: svaki poziv troši
-   mjesečnu kvotu (besplatno 500), pa jedno povlačenje dnevno staje 2–4 zahtjeva po meču. `fetch-offer --all-events`
-   povlači i mečeve drugih dana;
+   za mečeve današnjeg američkog dana, iz regija `us,eu` (2 zahtjeva po meču; `ODDS_REGIONS` u `.env`), a totali
+   svih mečeva jednim zahtjevom. Jedno povlačenje tako staje oko 2 × broj mečeva + 1 zahtjev, oko 480 mjesečno
+   uz jedno dnevno — besplatni paket ima 500, pa log upozorava kad kvota ne pokriva ostatak mjeseca.
+   `fetch-offer --all-events` povlači i mečeve drugih dana;
 4. **analyze** – analiza ponude i snimanje u `history/`, ali samo ako je ponuda povučena danas (mlađa od 20 h)
    i ako je bar polovina njenih parova među današnjim mečevima po ESPN rasporedu;
 5. **push** (samo uz `--push`) – commit `data/*.csv` i slanje na GitHub. Radi samo sa grane `main`, odbija ako su
@@ -124,11 +125,16 @@ u bočnoj traci („🕒 Dnevni posao“). Čuva se zadnjih 60 logova.
 **Automatsko pokretanje na ovom računaru (macOS):**
 
 ```bash
-python -m nba_engine schedule --install            # svaki dan u 18:00, sa --push
-python -m nba_engine schedule --install --hour 19  # drugo vrijeme; --no-push bez slanja na GitHub
+python -m nba_engine schedule --install            # svaki dan u 22:30, sa --push
+python -m nba_engine schedule --install --hour 23 --minute 45   # drugo vrijeme; --no-push bez slanja na GitHub
 python -m nba_engine schedule --status             # da li je podešen i kako je prošao zadnji run
 python -m nba_engine schedule --remove             # ukloni
 ```
+
+Zašto 22:30: to je 16:30 u Americi — popodnevni izvještaj o povredama (13:00 ET) je objavljen, linije kladionica su
+slegle, a prvi večernji mečevi počinju tek u 01:00 po našem vremenu. Vikendom popodne ima mečeva koji počinju ranije;
+oni su u 22:30 već u toku i analiza ih preskače. Kasnije vrijeme (npr. 23:45) hvata i izvještaj iz 17:30 ET, ali Mac
+tada mora biti budan.
 
 Podešavanje se upisuje u `~/Library/LaunchAgents/com.nba-engine.daily.plist` i koristi Python iz `.venv` ovog
 foldera. Računar mora biti uključen ili da spava u to vrijeme (po buđenju posao kreće odmah); ugašen računar
