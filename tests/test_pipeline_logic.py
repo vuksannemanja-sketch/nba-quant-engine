@@ -2,6 +2,7 @@
 
 Koriste stvarne podatke iz data/ (sezona iz conftest) i ponudu offer_latest.csv.
 """
+import pathlib
 import datetime as dt
 
 import pytest
@@ -10,6 +11,10 @@ from nba_engine.loaders import load_bundle
 from nba_engine.offer import parse_injury_override, read_offer_file
 from nba_engine.pipeline import AnalysisOptions, auto_context, format_auto_context, offer_freshness, run_analysis
 from nba_engine.schedule import ScheduleContext
+
+# Martovska ponuda 2025-26 na kojoj je snimljen zlatni izlaz starog app.py. Fiksna kopija: data/offer_latest.csv
+# se od novembra 2026 svaki dan mijenja (dnevni posao), pa testovi ne smiju da zavise od njega.
+LEGACY_OFFER = pathlib.Path(__file__).resolve().parent / "fixtures" / "legacy_offer_2026-03.csv"
 
 FAST = dict(mc_sims=500)
 
@@ -21,9 +26,9 @@ def bundle(real_data):
 
 @pytest.fixture(scope="module")
 def offer_text(real_data):
-    p = real_data.data_dir / "offer_latest.csv"
+    p = LEGACY_OFFER
     if not p.exists():
-        pytest.skip("nema offer_latest.csv")
+        pytest.skip("nema tests/fixtures/legacy_offer_2026-03.csv")
     return read_offer_file(p)
 
 
