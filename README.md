@@ -32,7 +32,7 @@ python -m nba_engine ui
 |---|---|
 | `python -m nba_engine ui` | pokreće Streamlit aplikaciju (isto što i `streamlit run app.py`) |
 | `python -m nba_engine analyze` | dnevna analiza u terminalu nad `data/offer_latest.csv`; ispisuje najbolje pickove i snima u `history/` |
-| `python -m nba_engine fetch-offer` | povlači današnju ponudu sa The Odds API u `data/offer_latest.csv` |
+| `python -m nba_engine fetch-offer` | povlači današnju ponudu sa The Odds API u `data/offer_latest.csv` (samo mečevi današnjeg američkog dana; `--all-events` za sve) |
 | `python -m nba_engine refresh` | osvježava CSV podatke: ponuda, igrači/timovi, ozljede, matchup + forma, raspored (H2H uz `--with-h2h`) |
 | `python -m nba_engine check` | provjera podešavanja, podataka i biblioteka |
 | `python -m nba_engine daily` | dnevni posao u jednom potezu: refresh → settle → fetch-offer → analyze (uz `--push` i slanje podataka na GitHub) |
@@ -108,7 +108,10 @@ Faze idu redom i greška u jednoj ne zaustavlja ostale:
 
 1. **refresh** – igrači/timovi, ozljede, DEF/OFF matchup + forma, raspored (H2H uz `--with-h2h`);
 2. **settle** – poravnanje ranijih analiza sa stvarnim poenima (evaluacija);
-3. **offer** – današnja ponuda sa The Odds API (preskače se ako `ODDS_API_KEY` nije u `.env`);
+3. **offer** – današnja ponuda sa The Odds API (preskače se ako `ODDS_API_KEY` nije u `.env`). Kvote se traže samo
+   za mečeve današnjeg američkog dana, a za meč bez player props linija ne traži se ni total: svaki poziv troši
+   mjesečnu kvotu (besplatno 500), pa jedno povlačenje dnevno staje 2–4 zahtjeva po meču. `fetch-offer --all-events`
+   povlači i mečeve drugih dana;
 4. **analyze** – analiza ponude i snimanje u `history/`, ali samo ako je ponuda povučena danas (mlađa od 20 h)
    i ako je bar polovina njenih parova među današnjim mečevima po ESPN rasporedu;
 5. **push** (samo uz `--push`) – commit `data/*.csv` i slanje na GitHub. Radi samo sa grane `main`, odbija ako su
@@ -191,8 +194,9 @@ Isti testovi se sami pokreću na GitHub-u pri svakom pull requestu i svakoj izmj
 
 - jedinični testovi: parsiranje ponude, normalizacija imena/timova, formule, evaluacija, konfiguracija, osvježavanje (čiste funkcije);
 - testovi na stvarnim podacima iz `data/`;
-- **regresija**: `tests/fixtures/legacy_full_portfolio.csv` je izlaz starog `app.py` na istim podacima;
-  nova aplikacija mora dati iste brojke (`tests/test_regression_legacy.py`).
+- **regresija**: `tests/fixtures/legacy_full_portfolio.csv` je izlaz starog `app.py` na martovskoj ponudi
+  `tests/fixtures/legacy_offer_2026-03.csv` i podacima 2025-26; nova aplikacija mora dati iste brojke
+  (`tests/test_regression_legacy.py`). Testovi ne čitaju `data/offer_latest.csv`, jer se on svaki dan mijenja.
 
 ## Struktura
 

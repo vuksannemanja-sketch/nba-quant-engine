@@ -158,7 +158,8 @@ def cmd_analyze(args) -> int:
 def cmd_fetch_offer(args) -> int:
     from .odds_api import fetch_daily_offer
     settings = _settings_from_args(args)
-    res = fetch_daily_offer(settings, log=print, best_odds=not args.single_book, closing=args.closing)
+    res = fetch_daily_offer(settings, log=print, best_odds=not args.single_book, closing=args.closing,
+                            only_today=not args.all_events)
     if not res.ok:
         print(f"❌ {res.message}")
         return 1
@@ -312,6 +313,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="kvote samo od kladionice najvišeg prioriteta (bez traženja najbolje kvote)")
     s.add_argument("--closing", action="store_true",
                    help="snimi zatvorene linije u data/closing_<datum>.csv (za CLV); ponuda se ne mijenja; troši API zahtjeve")
+    s.add_argument("--all-events", action="store_true",
+                   help="povuci kvote i za mečeve drugih dana (podrazumijevano: samo današnji američki dan, štedi kvotu)")
     s.set_defaults(func=cmd_fetch_offer)
 
     s = sub.add_parser("refresh", parents=[common], help="osvježi podatke")

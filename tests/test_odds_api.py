@@ -1,8 +1,11 @@
 import pandas as pd
 
 from nba_engine.config import Settings
-from nba_engine.odds_api import (OddsApiClient, OddsApiError, extract_player_props, fetch_daily_offer,
-                                 find_player_team, order_bookmakers, props_to_frame)
+import datetime as dt
+
+from nba_engine.odds_api import (OddsApiClient, OddsApiError, current_game_date, event_game_date,
+                                 event_has_player_points, extract_player_props, fetch_daily_offer,
+                                 find_player_team, order_bookmakers, props_to_frame, select_events_for_game_date)
 from nba_engine.utils import normalize_name
 
 
@@ -68,8 +71,10 @@ class _FakeResp:
 class _FakeHttp:
     def __init__(self, routes, status=200):
         self.routes, self.status = routes, status
+        self.calls = []  # (sufiks URL-a, markets) — za brojanje API poziva
 
     def get(self, url, params=None, timeout=None):
+        self.calls.append((url.rsplit("/sports/basketball_nba", 1)[-1], (params or {}).get("markets")))
         # najduži ključ koji je sufiks URL-a (da /events ne uhvati /events/ev1/odds)
         for key in sorted(self.routes, key=len, reverse=True):
             if url.endswith(key):
@@ -137,3 +142,59 @@ def test_fetch_daily_offer_closing_writes_only_closing_file(tmp_path):
     assert any(p.name.startswith("offer_books_") for p in res2.paths)
     assert list(pd.read_csv(tmp_path / "offer_latest.csv").columns) == ["PLAYER", "PLAYER_TEAM", "LINE", "OVER_ODDS",
                                                                          "UNDER_ODDS", "OPP_TEAM", "TOTAL_MATCH"]
+
+
+def test_event_game_date_uses_us_eastern_day():
+    # 02:30 UTC 2. novembra = 21:30 istočno 1. novembra → američki dan je 1. novembar
+    assert event_game_date({"commence_time": "2026-11-02T02:30:00Z"}) == dt.date(2026, 11, 1)
+    assert event_game_date({"commence_time": "2026-11-01T17:00:00Z"}) == dt.date(2026, 11, 1)
+    assert event_game_date({"commence_time": "2026-11-02T23:00:00Z"}) == dt.date(2026, 11, 2)
+    assert event_game_date({}) is None and event_game_date({"commence_time": "nije datum"}) is None
+    # 02:00 po srednjoevropskom (01:00 UTC) je još prethodni američki dan
+    assert current_game_date(dt.datetime(2026, 11, 2, 1, 0, tzinfo=dt.timezone.utc)) == dt.date(2026, 11, 1)
+    assert current_game_date(dt.datetime(2026, 11, 2, 12, 0, tzinfo=dt.timezone.utc)) == dt.date(2026, 11, 2)
+    events = [{"id": "a", "commence_time": "2026-11-01T23:00:00Z"}, {"id": "b", "commence_time": "2026-11-02T23:00:00Z"},
+              {"id": "c"}]
+    kept, skipped = select_events_for_game_date(events, dt.date(2026, 11, 1))
+    assert [e["id"] for e in kept] == ["a", "c"] and [e["id"] for e in skipped] == ["b"]  # bez vremena: zadržan
+    assert event_has_player_points(_event_payload([("pinnacle", [("Cade Cunningham", 27.5, 1.9, 1.85)])]))
+    assert not event_has_player_points({"bookmakers": [{"key": "x", "markets": [{"key": "player_points", "outcomes": []}]}]})
+    assert not event_has_player_points([]) and not event_has_player_points({})
+
+
+def test_fetch_daily_offer_skips_other_days_and_totals_without_props(tmp_path):
+    settings = Settings.load(data_dir=tmp_path, season="2025-26", env_file=tmp_path / "no.env")
+    events = [{"id": "ev1", "home_team": "Detroit Pistons", "away_team": "Oklahoma City Thunder",
+               "commence_time": "2026-11-01T23:00:00Z"},
+              {"id": "ev2", "home_team": "Boston Celtics", "away_team": "Miami Heat",
+               "commence_time": "2026-11-02T23:30:00Z"},          # sutra → ne povlači se
+              {"id": "ev3", "home_team": "Los Angeles Lakers", "away_team": "Toronto Raptors",
+               "commence_time": "2026-11-02T03:00:00Z"}]         # 22:00 istočno 1.11. → danas, ali bez props linija
+    routes = {"/events": events,
+              "/events/ev1/odds": _event_payload([("pinnacle", [("Cade Cunningham", 27.5, 1.9, 1.85)])]),
+              "/events/ev2/odds": _event_payload([("pinnacle", [("Shai Gilgeous-Alexander", 30.5, 1.9, 1.9)])]),
+              "/events/ev3/odds": {"bookmakers": []}}
+    http = _FakeHttp(routes)
+    lines = []
+    res = fetch_daily_offer(settings, log=lines.append, players_df=_players(), client=OddsApiClient("key", http=http),
+                            game_date=dt.date(2026, 11, 1))
+    assert res.ok, res.message
+    assert res.events == 2 and res.events_skipped == 1
+    assert list(res.df["PLAYER"]) == ["Cade Cunningham"]
+    urls = [u for u, _ in http.calls]
+    assert "/events/ev2/odds" not in urls                                   # sutrašnji meč: nijedan poziv
+    assert ("/events/ev3/odds", "player_points") in http.calls
+    assert ("/events/ev3/odds", "totals") not in http.calls                  # bez props linija: total se ne traži
+    assert ("/events/ev1/odds", "totals") in http.calls
+    assert any("preskočeno radi štednje" in l for l in lines)
+    # bez filtera: i sutrašnji meč ulazi
+    http2 = _FakeHttp(routes)
+    res2 = fetch_daily_offer(settings, log=lambda m: None, players_df=_players(), client=OddsApiClient("key", http=http2),
+                             only_today=False)
+    assert res2.events == 3 and res2.events_skipped == 0 and len(res2.df) == 2
+    # danas nema mečeva → jasna poruka, bez poziva za kvote
+    http3 = _FakeHttp(routes)
+    res3 = fetch_daily_offer(settings, log=lambda m: None, players_df=_players(), client=OddsApiClient("key", http=http3),
+                             game_date=dt.date(2026, 11, 5))
+    assert not res3.ok and "nema mečeva" in res3.message and res3.events_skipped == 3
+    assert [u for u, _ in http3.calls] == ["/events"]
