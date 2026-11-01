@@ -13,6 +13,10 @@ import pytest
 from nba_engine.offer import read_offer_file
 from nba_engine.pipeline import AnalysisOptions, run_analysis
 
+# Martovska ponuda 2025-26 na kojoj je snimljen zlatni izlaz starog app.py. Fiksna kopija: data/offer_latest.csv
+# se od novembra 2026 svaki dan mijenja (dnevni posao), pa testovi ne smiju da zavise od njega.
+LEGACY_OFFER = pathlib.Path(__file__).resolve().parent / "fixtures" / "legacy_offer_2026-03.csv"
+
 GOLD = pathlib.Path(__file__).parent / "fixtures" / "legacy_full_portfolio.csv"
 
 
@@ -21,9 +25,9 @@ LEGACY = dict(use_l10_minutes=False, use_l10_sigma=False)
 
 @pytest.fixture(scope="module")
 def result(real_data, bundle_legacy_mode):
-    offer = real_data.data_dir / "offer_latest.csv"
+    offer = LEGACY_OFFER
     if not offer.exists():
-        pytest.skip("nema data/offer_latest.csv")
+        pytest.skip("nema tests/fixtures/legacy_offer_2026-03.csv")
     return run_analysis(read_offer_file(offer), bundle_legacy_mode, AnalysisOptions(**LEGACY))
 
 
@@ -56,7 +60,7 @@ def test_summary_counts(result):
 
 
 def test_filters_and_options_change_output(real_data, bundle_legacy_mode):
-    offer = real_data.data_dir / "offer_latest.csv"
+    offer = LEGACY_OFFER
     txt = read_offer_file(offer)
     strict = run_analysis(txt, bundle_legacy_mode, AnalysisOptions(min_ev=10.0, only_positive=True, mc_sims=500, **LEGACY))
     # filter Min EV se primjenjuje PRIJE kazne za koncentraciju (kao u originalu), pa se dijeli kaznom

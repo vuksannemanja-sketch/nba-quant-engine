@@ -9,7 +9,7 @@ import datetime as _dt
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -28,6 +28,65 @@ Logger = Callable[[str], None]
 
 class OddsApiError(RuntimeError):
     pass
+
+
+# ---------------------------------------------------------------------------
+# Američki datum meča (The Odds API vraća i sutrašnje mečeve; kvote za njih troše kvotu uzalud)
+# ---------------------------------------------------------------------------
+
+US_TZ_NAME = "America/New_York"
+
+
+def _to_eastern(ts: _dt.datetime) -> _dt.datetime:
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=_dt.timezone.utc)
+    try:
+        from zoneinfo import ZoneInfo
+        return ts.astimezone(ZoneInfo(US_TZ_NAME))
+    except Exception:  # noqa: BLE001 — nema tz baze: fiksni EST
+        return ts.astimezone(_dt.timezone(_dt.timedelta(hours=-5)))
+
+
+def event_start_utc(event: dict) -> Optional[_dt.datetime]:
+    raw = str(event.get("commence_time") or "").strip()
+    if not raw:
+        return None
+    try:
+        ts = _dt.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return ts if ts.tzinfo else ts.replace(tzinfo=_dt.timezone.utc)
+
+
+def event_game_date(event: dict) -> Optional[_dt.date]:
+    """Datum meča po američkom istočnom vremenu (isto „danas“ kao ESPN raspored); None ako nema vremena."""
+    ts = event_start_utc(event)
+    return _to_eastern(ts).date() if ts else None
+
+
+def current_game_date(now: Optional[_dt.datetime] = None) -> _dt.date:
+    """Današnji američki datum mečeva (npr. 02:00 po srednjoevropskom je još prethodni američki dan)."""
+    return _to_eastern(now or _dt.datetime.now(_dt.timezone.utc)).date()
+
+
+def select_events_for_game_date(events: Sequence[dict], game_date: _dt.date) -> Tuple[List[dict], List[dict]]:
+    """(zadržani, preskočeni): zadržava mečeve tog američkog dana i one bez poznatog vremena početka."""
+    kept, skipped = [], []
+    for ev in events:
+        d = event_game_date(ev)
+        (kept if d is None or d == game_date else skipped).append(ev)
+    return kept, skipped
+
+
+def event_has_player_points(data) -> bool:
+    """Da li odgovor za meč uopšte sadrži player_points ishode (ako ne, ne vrijedi trošiti poziv za total)."""
+    if not isinstance(data, dict):
+        return False
+    for bookie in data.get("bookmakers", []) or []:
+        for market in bookie.get("markets", []) or []:
+            if market.get("key") == "player_points" and market.get("outcomes"):
+                return True
+    return False
 
 
 @dataclass
@@ -257,16 +316,21 @@ class FetchResult:
     message: str
     paths: List[Path] = field(default_factory=list)
     events: int = 0
+    events_skipped: int = 0  # mečevi drugog dana, preskočeni radi štednje API kvote
 
 
 def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optional[pd.DataFrame] = None,
                       client: Optional[OddsApiClient] = None, today: Optional[_dt.date] = None,
-                      best_odds: bool = True, closing: bool = False) -> FetchResult:
+                      best_odds: bool = True, closing: bool = False, only_today: bool = True,
+                      game_date: Optional[_dt.date] = None) -> FetchResult:
     """Povuci današnju ponudu i snimi je u ``offer_latest.csv`` (+ kopije ``dnevna_ponuda.csv`` i datirana)
     i detalje po kladionici u ``offer_books_<datum>.csv``.
 
     ``best_odds``: najbolja kvota među kladionicama sa istom linijom. ``closing``: snimak zatvorenih linija
     (pred početak mečeva) ide SAMO u ``closing_<datum>.csv`` (za CLV u evaluaciji); ponuda se ne dira.
+    ``only_today``: kvote se traže samo za mečeve današnjeg američkog dana (``game_date``); The Odds API
+    u listi vraća i sutrašnje mečeve, a svaki poziv za kvote troši mjesečnu kvotu. Za meč bez player props
+    ponude ne poziva se ni linija ukupnih poena.
     """
     client = client or OddsApiClient(settings.odds_api_key, settings.odds_api_base)
     try:
@@ -280,22 +344,35 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
         events = client.fetch_events()
         if not events:
             return FetchResult(False, pd.DataFrame(), "Nema utakmica u ponudi.")
-        log(f"📅 Utakmica u ponudi: {len(events)}")
+        skipped: List[dict] = []
+        if only_today:
+            gd = game_date or current_game_date()
+            events, skipped = select_events_for_game_date(events, gd)
+            log(f"📅 Utakmica u ponudi: {len(events) + len(skipped)}, današnjih (US datum {gd.isoformat()}): {len(events)}"
+                + (f" — {len(skipped)} drugog dana preskočeno radi štednje API kvote" if skipped else ""))
+            if not events:
+                return FetchResult(False, pd.DataFrame(), f"Danas (US datum {gd.isoformat()}) nema mečeva u ponudi; "
+                                   f"sutrašnjih {len(skipped)} se ne povlači (fetch-offer --all-events za sve).",
+                                   events_skipped=len(skipped))
+        else:
+            log(f"📅 Utakmica u ponudi: {len(events)}")
 
         all_props: List[dict] = []
         for event in events:
             event_id = event.get("id")
             home_abbr = team_name_to_abbr(event.get("home_team", ""))
             away_abbr = team_name_to_abbr(event.get("away_team", ""))
-            total_match = client.fetch_game_totals(event_id)
             data = client.fetch_event_player_points(event_id)
+            total_match = client.fetch_game_totals(event_id) if event_has_player_points(data) else None
             props = extract_player_props(data, home_abbr, away_abbr, total_match, players_df,
                                          settings.bookmaker_priority, log=log, best_odds=best_odds)
-            log(f"🏀 {away_abbr} @ {home_abbr}: total={total_match}, igrača={len(props)}")
+            log(f"🏀 {away_abbr} @ {home_abbr}: total={total_match}, igrača={len(props)}"
+                + ("" if props else " (nema player props linija — total nije ni tražen)"))
             all_props.extend(props)
 
         if not all_props:
-            return FetchResult(False, pd.DataFrame(), "Nema player props ponude.", events=len(events))
+            return FetchResult(False, pd.DataFrame(), "Nema player props ponude.", events=len(events),
+                               events_skipped=len(skipped))
 
         df = props_to_frame(all_props)
         df_detail = props_to_frame(all_props, detail=True)
@@ -322,7 +399,7 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
         if client.last_remaining is not None:
             msg += f", preostalo API zahtjeva: {client.last_remaining}"
         log("✅ " + msg)
-        return FetchResult(True, df, msg, paths, events=len(events))
+        return FetchResult(True, df, msg, paths, events=len(events), events_skipped=len(skipped))
     except OddsApiError as e:
         return FetchResult(False, pd.DataFrame(), str(e))
     except Exception as e:

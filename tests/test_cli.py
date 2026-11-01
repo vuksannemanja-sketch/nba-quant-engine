@@ -1,3 +1,4 @@
+import pathlib
 import os
 import subprocess
 import sys
@@ -5,6 +6,10 @@ import sys
 import pytest
 
 from tests.conftest import DATA_SEASON, ROOT
+
+# Martovska ponuda 2025-26 na kojoj je snimljen zlatni izlaz starog app.py. Fiksna kopija: data/offer_latest.csv
+# se od novembra 2026 svaki dan mijenja (dnevni posao), pa testovi ne smiju da zavise od njega.
+LEGACY_OFFER = pathlib.Path(__file__).resolve().parent / "fixtures" / "legacy_offer_2026-03.csv"
 
 
 def _run(*args, **env):
@@ -29,9 +34,9 @@ def test_cli_check_runs():
 
 
 def test_cli_analyze_on_real_data(real_data, tmp_path):
-    offer = real_data.data_dir / "offer_latest.csv"
+    offer = LEGACY_OFFER
     if not offer.exists():
-        pytest.skip("nema offer_latest.csv")
+        pytest.skip("nema tests/fixtures/legacy_offer_2026-03.csv")
     out = tmp_path / "full.csv"
     r = _run("analyze", "--offer", str(offer), "--no-schedule", "--top", "5", "--out", str(out),
              "--history-dir", str(tmp_path / "hist"), "--mc-sims", "1000")
