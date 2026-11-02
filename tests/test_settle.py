@@ -146,3 +146,39 @@ def test_closing_lines_give_clv(tmp_path):
     _analysis().to_csv(hist / "analysis_2026-10-30_19-00-00.csv", index=False)
     events = S.settle_history(hist, provider=lambda season: actuals, today=dt.date(2026, 11, 3), closing_dir=tmp_path)
     assert events[0]["status"] == "settled" and S.load_ledger(hist).iloc[0]["Avg CLV"] == 1.0
+
+
+def _fake_actuals_for(date_iso, rows):
+    """Minimalni 'stvarni rezultati': (NAME_KEY, TEAM_ABBR, OPP_TEAM, PTS, MIN)."""
+    df = pd.DataFrame(rows, columns=["NAME_KEY", "TEAM_ABBR", "OPP_TEAM", "PTS", "MIN"])
+    df["GAME_DATE"] = dt.date.fromisoformat(date_iso)
+    return df
+
+
+def test_one_official_analysis_per_day(tmp_path):
+    """Zadnja 'daily' analiza dana je zvanična; ostale istog dana se ne poravnavaju (superseded)."""
+    from nba_engine.history import DAILY_TAG, save_analysis
+    hist = tmp_path / "history"
+    an = pd.DataFrame({"Player": ["Cade Cunningham"], "TEAM_ABBR": ["DET"], "OPP_TEAM": ["OKC"], "Line": [25.5],
+                       "Over Odds": [1.9], "Under Odds": [1.9], "Final Projection": [27.0], "Projection Edge": [1.5],
+                       "Model Pick": ["OVER"], "Best EV %": [8.0]})
+    p1 = save_analysis(an, hist, "2026-11-01_19-13-52")                       # ručna, ranija
+    p2 = save_analysis(an, hist, "2026-11-01_22-30-05", tag=DAILY_TAG)        # dnevni posao → zvanična
+    p3 = save_analysis(an, hist, "2026-11-01_23-40-00")                       # ručna poslije → ipak nije zvanična
+    p4 = save_analysis(an, hist, "2026-11-02_01-10-00")                       # prije 06:00 → isti US dan 1.11.
+    assert p2.name.endswith("_daily.csv")
+    official = S.official_analyses([p1, p2, p3, p4])
+    assert official == {dt.date(2026, 11, 1): p2}
+    actuals = _fake_actuals_for("2026-11-01", [["cade cunningham", "DET", "OKC", 30, 34]])
+    events = S.settle_history(hist, provider=lambda season: actuals, today=dt.date(2026, 11, 2), closing_dir=None)
+    status = {e["Analysis"]: e["status"] for e in events}
+    assert status[p2.name] == "settled"
+    assert status[p1.name] == status[p3.name] == status[p4.name] == "superseded"
+    assert "zvanična" in next(e["detail"] for e in events if e["Analysis"] == p1.name)
+    ledger = S.load_ledger(hist)
+    assert list(ledger["Analysis"]) == [p2.name] and int(ledger["Wins"].iloc[0]) == 1
+    # dan bez 'daily' analize: zadnja snimljena je zvanična
+    q1 = save_analysis(an, hist, "2026-11-03_20-00-00")
+    q2 = save_analysis(an, hist, "2026-11-03_22-00-00")
+    assert S.official_analyses([q1, q2])[dt.date(2026, 11, 3)] == q2
+    assert S.analysis_datetime(p2) == dt.datetime(2026, 11, 1, 22, 30, 5) and S.game_date_for(p4) == dt.date(2026, 11, 1)

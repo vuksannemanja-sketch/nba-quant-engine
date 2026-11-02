@@ -188,8 +188,9 @@ def cmd_settle(args) -> int:
     if not args.report:
         print(f"📒 Poravnanje analiza iz {hist} sa stvarnim poenima (NBA Stats game log)...")
         events = settle_history(hist, stake=args.stake, force=args.force, log=print, closing_dir=settings.data_dir)
-        n = {k: sum(1 for e in events if e["status"] == k) for k in ("settled", "pending", "no_data", "error")}
-        print(f"Poravnato: {n['settled']} | čeka mečeve: {n['pending']} | game log još nema datum: {n['no_data']} | greške: {n['error']}")
+        n = {k: sum(1 for e in events if e["status"] == k) for k in ("settled", "pending", "no_data", "error", "superseded")}
+        print(f"Poravnato: {n['settled']} | čeka mečeve: {n['pending']} | game log još nema datum: {n['no_data']} | "
+              f"greške: {n['error']} | nisu zvanične za svoj dan: {n['superseded']}")
         for e in events:
             if e["status"] in ("pending", "error"):
                 print(f"  · {e['Analysis']}: {e['detail']}")

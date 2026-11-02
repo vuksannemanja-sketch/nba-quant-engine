@@ -148,12 +148,12 @@ def stage_refresh(settings: Settings, log: Logger, with_h2h: bool = False) -> st
 def stage_settle(settings: Settings, log: Logger) -> str:
     from .settle import settle_history
     events = settle_history(settings.history_dir, log=log, closing_dir=settings.data_dir)
-    n = {k: sum(1 for e in events if e["status"] == k) for k in ("settled", "pending", "no_data", "error")}
+    n = {k: sum(1 for e in events if e["status"] == k) for k in ("settled", "pending", "no_data", "error", "superseded")}
     errors = [e for e in events if e["status"] == "error"]
     if errors and n["settled"] == 0 and len(errors) == len(events):
         raise RuntimeError("; ".join(str(e.get("detail", "")) for e in errors[:3]))
     return (f"poravnato {n['settled']}, čeka mečeve {n['pending']}, bez game log-a {n['no_data']}, "
-            f"greške {n['error']}")
+            f"greške {n['error']}, nezvanične {n['superseded']}")
 
 
 def stage_offer(settings: Settings, log: Logger) -> str:
@@ -167,7 +167,7 @@ def stage_offer(settings: Settings, log: Logger) -> str:
 
 
 def stage_analyze(settings: Settings, log: Logger, top: int = 10) -> str:
-    from .history import save_analysis
+    from .history import DAILY_TAG, save_analysis
     from .loaders import load_bundle
     from .offer import read_offer_file
     from .pipeline import AnalysisOptions, format_auto_context, run_analysis, summary_table
@@ -196,7 +196,7 @@ def stage_analyze(settings: Settings, log: Logger, top: int = 10) -> str:
     if not result.ok:
         raise RuntimeError(result.message)
     log("\n" + summary_table(result.df, top).to_string(index=False) + "\n")
-    path = save_analysis(result.df, settings.history_dir)
+    path = save_analysis(result.df, settings.history_dir, tag=DAILY_TAG)  # zvanična analiza dana za evaluaciju
     fresh = "" if result.offer_is_today else " (ESPN raspored nedostupan — svježina ponude nije provjerena)"
     return f"{len(result.df)} pickova snimljeno u {path.name}{fresh}"
 
