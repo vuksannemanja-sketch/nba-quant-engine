@@ -1,0 +1,54 @@
+PLAYER,PLAYER_TEAM,LINE,OVER_ODDS,UNDER_ODDS,OPP_TEAM,TOTAL_MATCH,BOOKMAKER,OVER_BOOK,UNDER_BOOK,N_BOOKS,N_BOOKS_SAME_LINE
+Luka Doncic,LAL,34.5,2.33,1.56,TOR,224.5,pinnacle,pinnacle,pinnacle,7,1
+Jayson Tatum,BOS,28.5,1.91,1.88,ORL,211.5,fanduel,bovada,fanduel,3,3
+Darius Garland,LAC,23.5,1.95,1.83,GSW,220.5,pinnacle,betmgm,betrivers,7,4
+Scottie Barnes,TOR,23.5,2.05,1.8,LAL,224.5,pinnacle,pinnacle,fanduel,7,4
+Desmond Bane,ORL,22.5,1.98,2.0,BOS,211.5,fanduel,fanduel,draftkings,3,3
+Pascal Siakam,IND,22.5,1.79,2.09,BKN,230.5,pinnacle,betrivers,pinnacle,7,2
+Austin Reaves,LAL,22.5,1.88,1.98,TOR,224.5,pinnacle,pinnacle,fanduel,7,5
+Yaxel Lendeborg,GSW,21.5,2.41,1.53,LAC,220.5,pinnacle,pinnacle,pinnacle,7,1
+Michael Porter Jr,BKN,21.5,1.8,1.99,IND,230.5,pinnacle,fanduel,pinnacle,6,3
+R.J. Barrett,TOR,20.5,1.88,2.0,LAL,224.5,pinnacle,draftkings,fanduel,7,6
+Julius Randle,BKN,20.5,1.88,1.93,IND,230.5,pinnacle,betrivers,betonlineag,7,4
+Andrew Nembhard,IND,18.5,1.98,1.83,BKN,230.5,pinnacle,fanduel,betrivers,7,5
+Immanuel Quickley,TOR,17.5,1.98,1.81,LAL,224.5,pinnacle,fanduel,pinnacle,7,4
+Franz Wagner,ORL,17.5,2.06,1.83,BOS,211.5,fanduel,fanduel,bovada,2,2
+Brandin Podziemski,GSW,16.5,1.98,1.9,LAC,220.5,pinnacle,draftkings,betmgm,7,5
+Brandon Williams,GSW,14.5,2.06,1.81,LAC,220.5,pinnacle,pinnacle,betrivers,7,2
+Rui Hachimura,LAC,14.5,1.61,2.24,GSW,220.5,pinnacle,pinnacle,pinnacle,7,1
+Anthony Black,ORL,13.5,2.05,1.74,BOS,211.5,fanduel,draftkings,fanduel,3,3
+Keaton Wagler,LAC,13.5,1.97,1.8,GSW,220.5,pinnacle,betonlineag,fanduel,7,3
+De'Anthony Melton,GSW,12.5,1.95,1.85,LAC,220.5,pinnacle,draftkings,betrivers,7,6
+Walker Kessler,LAL,12.5,1.98,1.96,TOR,224.5,pinnacle,fanduel,draftkings,6,4
+Tristan da Silva,ORL,12.5,1.77,2.05,BOS,211.5,fanduel,draftkings,bovada,3,3
+Paul George,BOS,12.5,1.77,1.98,ORL,211.5,fanduel,fanduel,fanduel,3,1
+Aaron Nesmith,IND,12.5,1.94,1.95,BKN,230.5,pinnacle,fanduel,pinnacle,7,6
+Nolan Traore,BKN,11.5,1.64,2.17,IND,230.5,pinnacle,pinnacle,pinnacle,6,1
+Mikel Brown Jr.,BKN,11.5,2.08,1.69,IND,230.5,pinnacle,pinnacle,pinnacle,1,1
+Derrick White,BOS,11.5,1.88,1.95,ORL,211.5,fanduel,fanduel,draftkings,3,3
+Kelly Oubre Jr.,IND,11.5,2.05,1.9,BKN,230.5,pinnacle,betmgm,pinnacle,7,6
+Derrick Jones,LAC,11.5,2.22,1.75,GSW,220.5,pinnacle,pinnacle,betrivers,7,3
+Ja'Kobe Walter,TOR,11.5,1.99,1.94,LAL,224.5,pinnacle,pinnacle,betrivers,7,5
+Jarace Walker,IND,10.5,1.87,1.93,BKN,230.5,pinnacle,betrivers,fanduel,6,3
+Wendell Carter Jr,ORL,10.5,2.1,1.77,BOS,211.5,fanduel,bovada,draftkings,3,3
+Brook Lopez,LAC,10.5,2.1,1.8,GSW,220.5,pinnacle,pinnacle,betmgm,7,4
+Gui Santos,GSW,10.5,2.02,1.82,LAC,220.5,pinnacle,draftkings,betrivers,7,5
+Collin Murray-Boyles,TOR,9.5,2.0,1.78,LAL,224.5,pinnacle,betrivers,pinnacle,6,4
+Collin Sexton,LAL,9.5,2.0,1.81,TOR,224.5,pinnacle,betmgm,pinnacle,7,3
+Payton Pritchard,BOS,9.5,2.06,1.91,ORL,211.5,fanduel,fanduel,bovada,3,3
+Day'Ron Sharpe,BKN,8.5,1.8,2.0,IND,230.5,pinnacle,fanduel,betmgm,7,4
+Kris Dunn,LAC,8.5,2.0,1.83,GSW,220.5,pinnacle,betrivers,draftkings,7,6
+Sandro Mamukelashvili,LAL,8.5,2.02,1.84,TOR,224.5,pinnacle,fanduel,pinnacle,7,5
+Georges Niang,GSW,8.5,1.93,1.88,LAC,220.5,pinnacle,betonlineag,pinnacle,7,4
+Isaiah Jackson,LAC,8.5,1.83,2.0,GSW,220.5,pinnacle,betrivers,fanduel,7,5
+Ziaire Williams,LAL,8.5,1.79,1.96,TOR,224.5,pinnacle,pinnacle,pinnacle,1,1
+Jay Huff,IND,8.5,2.04,1.78,BKN,230.5,fanduel,betonlineag,betrivers,5,3
+Noah Clowney,BKN,7.5,1.88,1.99,IND,230.5,pinnacle,pinnacle,draftkings,6,4
+Neemias Queta,BOS,7.5,1.62,2.24,ORL,211.5,draftkings,draftkings,draftkings,1,1
+Jakob Poeltl,TOR,7.5,2.01,1.85,LAL,224.5,pinnacle,pinnacle,betrivers,6,2
+Matisse Thybulle,LAL,7.5,1.88,1.99,TOR,224.5,pinnacle,betrivers,pinnacle,7,4
+Jake LaRavia,LAL,6.5,1.88,1.93,TOR,224.5,fanduel,betonlineag,fanduel,3,3
+Jamal Shead,TOR,6.5,2.01,1.8,LAL,224.5,pinnacle,draftkings,pinnacle,7,5
+Jase Richardson,ORL,6.5,2.05,1.74,BOS,211.5,draftkings,draftkings,draftkings,1,1
+Keon Ellis,BKN,5.5,1.67,2.12,IND,230.5,pinnacle,pinnacle,pinnacle,6,1
+Sam Hauser,BOS,3.5,2.3,1.6,ORL,211.5,draftkings,draftkings,draftkings,1,1
