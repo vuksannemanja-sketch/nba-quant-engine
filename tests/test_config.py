@@ -57,3 +57,31 @@ def test_odds_regions_default_and_env(tmp_path, monkeypatch):
     assert Settings.load(data_dir=tmp_path, season="2026-27", env_file=tmp_path / "no.env").odds_regions == "us,eu"
     monkeypatch.setenv("ODDS_REGIONS", "us")
     assert Settings.load(data_dir=tmp_path, season="2026-27", env_file=tmp_path / "no.env").odds_regions == "us"
+
+
+def test_ai_settings_default_and_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    s = Settings.load(data_dir=tmp_path, season="2026-27", env_file=tmp_path / "no.env", history_dir=tmp_path / "h")
+    assert s.anthropic_api_key == "" and s.ai_model == "claude-opus-5-5" and s.ai_history_dir == tmp_path / "h" / "ai"
+    assert "ANTHROPIC_API_KEY NIJE postavljen" in s.describe()
+    monkeypatch.setenv("ANTHROPIC_API_KEY", " sk-test ")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+    s = Settings.load(data_dir=tmp_path, season="2026-27", env_file=tmp_path / "no.env")
+    assert s.anthropic_api_key == "sk-test" and s.ai_model == "claude-sonnet-5-5"
+    assert "ANTHROPIC_API_KEY postavljen" in s.describe() and "sk-test" not in s.describe()
+
+
+def test_dotenv_edit_is_seen_without_restart(tmp_path, monkeypatch):
+    """Aplikacija stalno radi: ključ upisan u .env naknadno (ili izmijenjen) mora se vidjeti pri sljedećem učitavanju."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    env = tmp_path / ".env"
+    env.write_text("ANTHROPIC_API_KEY=\n")
+    assert Settings.load(data_dir=tmp_path, season="2026-27", env_file=env).anthropic_api_key == ""
+    env.write_text("ANTHROPIC_API_KEY=prvi\n")                      # prazna vrijednost se dopunjava
+    assert Settings.load(data_dir=tmp_path, season="2026-27", env_file=env).anthropic_api_key == "prvi"
+    env.write_text("ANTHROPIC_API_KEY=drugi\n")                     # vrijednost iz .env se osvježava
+    assert Settings.load(data_dir=tmp_path, season="2026-27", env_file=env).anthropic_api_key == "drugi"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "iz-okruzenja")          # postavljeno izvan .env se ne gazi
+    assert Settings.load(data_dir=tmp_path, season="2026-27", env_file=env).anthropic_api_key == "iz-okruzenja"
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)

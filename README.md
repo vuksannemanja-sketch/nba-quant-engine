@@ -35,7 +35,8 @@ python -m nba_engine ui
 | `python -m nba_engine fetch-offer` | povlači današnju ponudu sa The Odds API u `data/offer_latest.csv` (samo mečevi današnjeg američkog dana; `--all-events` za sve) |
 | `python -m nba_engine refresh` | osvježava CSV podatke: ponuda, igrači/timovi, ozljede, matchup + forma, raspored (H2H uz `--with-h2h`) |
 | `python -m nba_engine check` | provjera podešavanja, podataka i biblioteka |
-| `python -m nba_engine daily` | dnevni posao u jednom potezu: refresh → settle → fetch-offer → analyze (uz `--push` i slanje podataka na GitHub) |
+| `python -m nba_engine daily` | dnevni posao u jednom potezu: refresh → settle → fetch-offer → analyze → ai (uz `--push` i slanje podataka na GitHub) |
+| `python -m nba_engine ai` | AI izvještaj: Claude bira 10 najsigurnijih opklada iz današnje analize; `--report` ispisuje statistiku AI izbora |
 | `python -m nba_engine schedule --install` | podešava da se `daily` sam pokreće svaki dan na ovom računaru (macOS launchd); `--status`, `--remove` |
 
 Korisne opcije: `analyze --offer PUTANJA --top 20 --min-ev 5 --only-positive --no-schedule`,
@@ -71,7 +72,9 @@ sezona po današnjem datumu (od oktobra nova). Na početku nove sezone dovoljno 
 sama bira najnoviju sezonu u `data/`. Stari fajlovi (`*_2025-26.csv`) ostaju i ne smetaju; `NBA_SEASON` u `.env`
 treba samo ako želiš nasilno drugu sezonu.
 
-`.env` promjenljive: `ODDS_API_KEY`, `NBA_SEASON`, `NBA_DATA_DIR`, `NBA_HISTORY_DIR`, `ODDS_BOOKMAKERS` (vidi `.env.example`).
+`.env` promjenljive: `ODDS_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `NBA_SEASON`, `NBA_DATA_DIR`,
+`NBA_HISTORY_DIR`, `ODDS_BOOKMAKERS` (vidi `.env.example`). Izmjena `.env` fajla se vidi i u aplikaciji koja već radi,
+bez ponovnog pokretanja.
 Fajl `.env` se ne šalje na GitHub.
 
 ## Automatska evaluacija (da li model pogađa)
@@ -97,19 +100,40 @@ istog dana dobijaju status „nije zvanična“ i ne ulaze u ledger. Aplikacija 
 
 Preporuka: dvije do tri sedmice samo snimati i poravnavati, bez uplata, pa tek onda zaključivati o modelu.
 
+## AI izvještaj (10 najsigurnijih)
+
+Poslije dnevne analize Claude (Anthropic API) dobija cijelu ponudu sa projekcijama modela, formom, minutama i listom
+povreda, i bira **10 opklada sa najvećom vjerovatnoćom prolaza**. Za svaku piše kratko obrazloženje i glavni rizik, a
+na vrhu kratak pregled dana. Smije izabrati i stranu suprotnu od modela.
+
+- **Gdje se vidi:** rubrika „🤖 AI izvještaj“ na vrhu bočne trake aplikacije; u terminalu `python -m nba_engine ai`.
+- **Kad se pravi:** u dnevnom poslu, odmah poslije analize (faza `ai`). Dugme „Napravi AI izvještaj sada“ u aplikaciji
+  pravi ručni izvještaj nad trenutnom tabelom.
+- **Zasebna statistika:** izbori se snimaju u `history/ai/` u istom formatu kao analiza, pa ih poravnava isti `settle`,
+  ali u vlastiti ledger (`history/ai/ledger.csv`). Aplikacija i `python -m nba_engine ai --report` prikazuju zbir po
+  danima i **po mjesecima**, odvojeno od modela. Važi isto pravilo „jedna po danu“: ocjenjuje se izvještaj dnevnog
+  posla (oznaka `_daily`), ručni samo ako tog dana nema dnevnog.
+- **Ključ:** `ANTHROPIC_API_KEY` u `.env` (pravi se na console.anthropic.com → API keys; API se plaća odvojeno od
+  pretplate na Claude aplikaciju). Bez ključa se faza preskače i sve ostalo radi kao prije.
+- **Model i trošak:** podrazumijevano `claude-opus-5-5` (`ANTHROPIC_MODEL` u `.env` za drugi). Jedan izvještaj je
+  jedan poziv; stvarni broj tokena i okvirni trošak pišu ispod svakog izvještaja i zbirno za mjesec. Za istu analizu
+  se izvještaj ne pravi dva puta (`ai --force` pravi novi i ostavlja stari).
+- **Šta AI ne radi:** ne pretražuje internet i ne zna ništa što nije u podacima aplikacije; sastavi koji izađu pred
+  sam meč mu nisu poznati.
+
 ## Dnevni posao i automatsko pokretanje
 
 Sve što treba uraditi jednom dnevno stoji u jednoj komandi:
 
 ```bash
-python -m nba_engine daily          # refresh → settle → fetch-offer → analyze
+python -m nba_engine daily          # refresh → settle → fetch-offer → analyze → ai
 python -m nba_engine daily --push   # isto + commit i slanje osvježenih data/*.csv na GitHub (grana main)
 ```
 
 Faze idu redom i greška u jednoj ne zaustavlja ostale:
 
 1. **refresh** – igrači/timovi, ozljede, DEF/OFF matchup + forma, raspored (H2H uz `--with-h2h`);
-2. **settle** – poravnanje ranijih analiza sa stvarnim poenima (evaluacija);
+2. **settle** – poravnanje ranijih analiza sa stvarnim poenima (evaluacija), i modela i AI izbora;
 3. **offer** – današnja ponuda sa The Odds API (preskače se ako `ODDS_API_KEY` nije u `.env`). Kvote se traže samo
    za mečeve današnjeg američkog dana, iz regija `us,eu` (2 zahtjeva po meču; `ODDS_REGIONS` u `.env`), a totali
    svih mečeva jednim zahtjevom. Jedno povlačenje tako staje oko 2 × broj mečeva + 1 zahtjev, oko 480 mjesečno
@@ -117,7 +141,8 @@ Faze idu redom i greška u jednoj ne zaustavlja ostale:
    `fetch-offer --all-events` povlači i mečeve drugih dana;
 4. **analyze** – analiza ponude i snimanje u `history/`, ali samo ako je ponuda povučena danas (mlađa od 20 h)
    i ako je bar polovina njenih parova među današnjim mečevima po ESPN rasporedu;
-5. **push** (samo uz `--push`) – commit `data/*.csv` i slanje na GitHub. Radi samo sa grane `main`, odbija ako su
+5. **ai** – AI izvještaj nad tom analizom (preskače se ako `ANTHROPIC_API_KEY` nije u `.env` ili analiza nije snimljena);
+6. **push** (samo uz `--push`) – commit `data/*.csv` i slanje na GitHub. Radi samo sa grane `main`, odbija ako su
    izmijenjeni i drugi fajlovi (kod), a pri sukobu sa GitHub-om zadržava lokalne (novije) podatke. Ako nema mreže,
    commit ostaje lokalno i šalje se sutra.
 
@@ -224,6 +249,7 @@ nba_engine/
   refresh/              osvježavanje: players, injuries, matchups, schedule, h2h
   settle.py             automatska evaluacija (poravnanje sa stvarnim poenima)
   prior.py              dopuna rane sezone prošlom sezonom
+  ai_report.py          AI izvještaj: Claude bira 10 najsigurnijih opklada (history/ai/)
   daily.py              dnevni posao (sve faze redom, log, slanje na GitHub)
   scheduler.py          dnevno pokretanje na računaru (macOS launchd)
   __main__.py           komandna linija

@@ -5,6 +5,7 @@ Faze (greška u jednoj ne zaustavlja ostale):
   settle    poravnaj ranije snimljene analize sa stvarnim poenima (automatska evaluacija)
   offer     povuci današnju ponudu sa The Odds API (preskače se ako ODDS_API_KEY nije postavljen)
   analyze   analiziraj ponudu i snimi rezultat u history/ (samo ako je ponuda za današnje mečeve)
+  ai        AI izvještaj: Claude bira 10 najsigurnijih opklada iz te analize (preskače se bez ANTHROPIC_API_KEY)
   push      (opcija ``--push``) commit-uj izmijenjene CSV podatke i pošalji ih na GitHub (grana main)
 
 Svaki run piše log u ``logs/daily_<datum>_<vrijeme>.log`` i rezime u ``logs/daily_last_report.json``,
@@ -29,12 +30,13 @@ DEFAULT_LOG_DIR = PROJECT_ROOT / "logs"
 LAST_REPORT_NAME = "daily_last_report.json"
 KEEP_LOGS = 60  # koliko zadnjih log fajlova čuvati
 
-STAGES: List[str] = ["refresh", "settle", "offer", "analyze", "push"]
+STAGES: List[str] = ["refresh", "settle", "offer", "analyze", "ai", "push"]
 STAGE_LABELS: Dict[str, str] = {
     "refresh": "🔄 Osvježavanje podataka",
     "settle":  "📒 Poravnanje analiza (evaluacija)",
     "offer":   "📋 Današnja ponuda (The Odds API)",
     "analyze": "🧮 Analiza i snimanje u history/",
+    "ai":      "🤖 AI izvještaj (10 najsigurnijih)",
     "push":    "☁️ Slanje podataka na GitHub",
 }
 # fajlovi koje git faza smije da commit-uje (sve ostalo zaustavlja slanje)
@@ -146,14 +148,21 @@ def stage_refresh(settings: Settings, log: Logger, with_h2h: bool = False) -> st
 
 
 def stage_settle(settings: Settings, log: Logger) -> str:
-    from .settle import settle_history
-    events = settle_history(settings.history_dir, log=log, closing_dir=settings.data_dir)
+    from .settle import cached_provider, settle_history
+    provider = cached_provider()   # isti game log za analize modela i za AI izbore (povlači se jednom)
+    events = settle_history(settings.history_dir, provider=provider, log=log, closing_dir=settings.data_dir)
     n = {k: sum(1 for e in events if e["status"] == k) for k in ("settled", "pending", "no_data", "error", "superseded")}
     errors = [e for e in events if e["status"] == "error"]
     if errors and n["settled"] == 0 and len(errors) == len(events):
         raise RuntimeError("; ".join(str(e.get("detail", "")) for e in errors[:3]))
-    return (f"poravnato {n['settled']}, čeka mečeve {n['pending']}, bez game log-a {n['no_data']}, "
-            f"greške {n['error']}, nezvanične {n['superseded']}")
+    msg = (f"poravnato {n['settled']}, čeka mečeve {n['pending']}, bez game log-a {n['no_data']}, "
+           f"greške {n['error']}, nezvanične {n['superseded']}")
+    if settings.ai_history_dir.is_dir():
+        ai_events = settle_history(settings.ai_history_dir, provider=provider, closing_dir=settings.data_dir,
+                                   log=lambda m: log("🤖 AI izbori — " + m))
+        a = {k: sum(1 for e in ai_events if e["status"] == k) for k in ("settled", "pending", "no_data", "error")}
+        msg += f" | AI izbori: poravnato {a['settled']}, čeka mečeve {a['pending'] + a['no_data']}, greške {a['error']}"
+    return msg
 
 
 def stage_offer(settings: Settings, log: Logger) -> str:
@@ -199,6 +208,15 @@ def stage_analyze(settings: Settings, log: Logger, top: int = 10) -> str:
     path = save_analysis(result.df, settings.history_dir, tag=DAILY_TAG)  # zvanična analiza dana za evaluaciju
     fresh = "" if result.offer_is_today else " (ESPN raspored nedostupan — svježina ponude nije provjerena)"
     return f"{len(result.df)} pickova snimljeno u {path.name}{fresh}"
+
+
+def stage_ai(settings: Settings, log: Logger) -> str:
+    """AI izvještaj za zvaničnu analizu današnjeg dana; izbori idu u history/ai/ i ocjenjuju se zasebno."""
+    from .ai_report import render_markdown, run_for_today
+    report, msg = run_for_today(settings, log=log)
+    if report is not None:
+        log("\n" + render_markdown(report.data) + "\n")
+    return msg
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +306,7 @@ DEFAULT_RUNNERS: Dict[str, Callable[[Settings, Logger], str]] = {
     "settle": stage_settle,
     "offer": stage_offer,
     "analyze": stage_analyze,
+    "ai": stage_ai,
     "push": stage_push,
 }
 
