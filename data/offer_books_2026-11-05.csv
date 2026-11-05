@@ -1,0 +1,29 @@
+PLAYER,PLAYER_TEAM,LINE,OVER_ODDS,UNDER_ODDS,OPP_TEAM,TOTAL_MATCH,BOOKMAKER,OVER_BOOK,UNDER_BOOK,N_BOOKS,N_BOOKS_SAME_LINE
+Giannis Antetokounmpo,MIA,28.5,1.9,1.92,GSW,236.5,fanduel,betonlineag,betrivers,6,5
+Stephen Curry,GSW,27.5,1.91,1.87,MIA,236.5,fanduel,draftkings,betrivers,6,5
+Devin Booker,PHX,24.5,1.66,2.14,ORL,222.5,pinnacle,pinnacle,pinnacle,7,1
+Franz Wagner,ORL,22.5,1.85,2.08,PHX,222.5,pinnacle,draftkings,pinnacle,7,4
+Desmond Bane,ORL,20.5,1.85,1.97,PHX,222.5,pinnacle,betrivers,pinnacle,7,6
+Bam Adebayo,MIA,18.5,1.97,1.97,GSW,236.5,fanduel,draftkings,betonlineag,6,5
+Yaxel Lendeborg,GSW,18.5,1.87,1.96,MIA,236.5,fanduel,betmgm,fanduel,6,4
+Brandin Podziemski,GSW,16.5,1.94,1.93,MIA,236.5,fanduel,betrivers,draftkings,6,5
+Miles Bridges,PHX,16.5,1.93,1.87,ORL,222.5,pinnacle,pinnacle,betmgm,7,4
+Dillon Brooks,PHX,16.5,1.96,1.84,ORL,222.5,pinnacle,fanduel,pinnacle,7,3
+Jalen Green,PHX,16.5,1.92,2.04,ORL,222.5,pinnacle,draftkings,pinnacle,7,4
+Anthony Black,ORL,14.5,1.81,2.05,PHX,222.5,pinnacle,betonlineag,betmgm,7,4
+Tristan da Silva,ORL,12.5,2.02,1.8,PHX,222.5,pinnacle,fanduel,betmgm,7,4
+Wendell Carter Jr,ORL,11.5,1.76,2.05,PHX,222.5,pinnacle,betrivers,betmgm,7,3
+Davion Mitchell,MIA,11.5,1.91,2.0,GSW,236.5,fanduel,betmgm,betrivers,6,4
+Klay Thompson,MIA,11.5,1.98,1.95,GSW,236.5,fanduel,fanduel,draftkings,6,5
+De'Anthony Melton,GSW,10.5,1.98,1.81,MIA,236.5,fanduel,fanduel,draftkings,6,4
+Andrew Wiggins,MIA,10.5,1.8,2.0,GSW,236.5,fanduel,fanduel,betmgm,6,4
+Pelle Larsson,MIA,10.5,1.95,1.96,GSW,236.5,fanduel,betmgm,betrivers,6,4
+Collin Gillespie,PHX,9.5,1.98,1.85,ORL,222.5,pinnacle,draftkings,fanduel,7,6
+Jase Richardson,ORL,8.5,1.96,1.88,PHX,222.5,pinnacle,draftkings,fanduel,7,6
+Bobby Portis,MIA,8.5,1.95,1.87,GSW,236.5,fanduel,draftkings,betmgm,5,5
+Georges Niang,GSW,7.5,1.89,1.92,MIA,236.5,fanduel,fanduel,draftkings,6,5
+Oso Ighodaro,PHX,6.5,1.98,1.91,ORL,222.5,pinnacle,pinnacle,betmgm,7,6
+Jamal Cain,ORL,6.5,2.06,1.78,PHX,222.5,pinnacle,pinnacle,draftkings,7,4
+Khaman Maluach,PHX,5.5,1.81,2.05,ORL,222.5,pinnacle,draftkings,betrivers,7,5
+Draymond Green,GSW,5.5,2.0,1.91,MIA,236.5,fanduel,betmgm,draftkings,6,5
+Will Richard,GSW,5.5,1.83,2.02,MIA,236.5,fanduel,betmgm,fanduel,4,4
