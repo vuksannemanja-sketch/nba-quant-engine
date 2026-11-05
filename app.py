@@ -13,6 +13,8 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
+from nba_engine.ai_report import (AiReportError, cost_summary, current_game_date, generate_ai_report, latest_report,
+                                  model_track_record, picks_table, render_markdown)
 from nba_engine.config import CSV_LABELS, Settings
 from nba_engine.evaluation import (compare_two_models, evaluate_engine, grade_engine,
                                    load_actual_results_csv, load_prediction_results_csv)
@@ -25,7 +27,8 @@ from nba_engine.refresh import ALL_STEPS, DEFAULT_STEPS, STEP_LABELS, run_refres
 from nba_engine.daily import load_last_report
 from nba_engine import scheduler as _scheduler
 from nba_engine.schedule import STATE_ICON, fetch_schedule_context, games_for_date
-from nba_engine.settle import load_all_settled, load_ledger, overall_summary, settle_history
+from nba_engine.settle import (cached_provider, load_all_settled, load_ledger, monthly_summary, overall_summary,
+                               settle_history)
 from nba_engine.utils import normalize_name, smart_decode
 
 
@@ -102,6 +105,62 @@ with col_main3:
     else:
         st.info("📋 Pokreni osvježavanje ponude")
 st.markdown("---")
+
+
+# =====================================================
+# Bočna traka: AI izvještaj (na vrhu). Sadržaj se čita iz history/ai/; dugme se dodaje poslije analize.
+# =====================================================
+
+_ai_dir = settings.ai_history_dir
+_ai_today = current_game_date().isoformat()
+st.sidebar.header("🤖 AI izvještaj")
+st.sidebar.caption("Claude svaki dan iz ponude bira 10 najsigurnijih opklada (dnevni posao u 22:30). "
+                   "Njegovi izbori se ocjenjuju zasebno od modela.")
+_ai_flash = st.session_state.pop("ai_flash", None)
+if _ai_flash:
+    st.sidebar.success(_ai_flash)
+_ai_report = latest_report(_ai_dir)
+if _ai_report:
+    _ai_is_today = _ai_report.get("game_date") == _ai_today
+    _ai_day = datetime.date.fromisoformat(str(_ai_report.get("game_date"))[:10]).strftime("%d.%m.")
+    if _ai_is_today:
+        st.sidebar.success(f"Izvještaj za današnje mečeve ({_ai_day})")
+    else:
+        st.sidebar.info(f"Zadnji izvještaj je za mečeve {_ai_day} Današnji stiže poslije dnevnog posla.")
+    with st.sidebar.expander(f"📄 10 najsigurnijih — {_ai_day}", expanded=_ai_is_today):
+        st.markdown(render_markdown(_ai_report))
+        _ai_usage = _ai_report.get("usage") or {}
+        if _ai_usage.get("cost_usd") is not None:
+            st.caption(f"Trošak ovog izvještaja: oko {_ai_usage['cost_usd']:.2f} USD "
+                       f"({_ai_usage.get('input_tokens', 0)} + {_ai_usage.get('output_tokens', 0)} tokena)")
+        if not _ai_report.get("official"):
+            st.caption("Ručni izvještaj iz aplikacije. U statistiku ulazi izvještaj dnevnog posla ako tog dana postoji.")
+else:
+    st.sidebar.caption("Još nema nijednog AI izvještaja.")
+if not settings.anthropic_api_key:
+    st.sidebar.warning("ANTHROPIC_API_KEY nije upisan u .env, pa se AI izvještaj ne pravi.")
+
+_ai_ledger = load_ledger(_ai_dir)
+if _ai_ledger.empty:
+    st.sidebar.caption("Statistika AI izbora se pojavi dan poslije prvog izvještaja, kad se mečevi odigraju.")
+else:
+    _ai_months = monthly_summary(_ai_ledger)
+    _ai_this = _ai_months[_ai_months["Month"] == _ai_today[:7]]
+    st.sidebar.markdown("**Učinak AI izbora — ovaj mjesec**")
+    if _ai_this.empty:
+        st.sidebar.caption("Ovaj mjesec još nema poravnatih AI izbora.")
+    else:
+        _ai_row = _ai_this.iloc[0]
+        _ac1, _ac2 = st.sidebar.columns(2)
+        _ac1.metric("Pogodak", f"{_ai_row['Accuracy %']:.1f}%")
+        _ac2.metric("ROI", f"{_ai_row['ROI %']:+.1f}%")
+        st.sidebar.caption(f"{int(_ai_row['Wins'])} pogodaka, {int(_ai_row['Losses'])} promašaja, profit {_ai_row['Profit']:+.2f} "
+                           f"({int(_ai_row['Days'])} dana). Detalji po mjesecima su dolje na stranici.")
+_ai_cost = cost_summary(_ai_dir, month=_ai_today[:7])
+if _ai_cost["reports"]:
+    st.sidebar.caption(f"Trošak ovog mjeseca: oko {_ai_cost['cost_usd']:.2f} USD ({_ai_cost['reports']} izvještaja)")
+_ai_button_slot = st.sidebar.container()
+st.sidebar.markdown("---")
 
 
 # =====================================================
@@ -461,6 +520,27 @@ if _inj_used is not None and not _inj_used.empty and "NAME_KEY" in _inj_used.col
 st.caption(f"Bookmaker offset: **{result.bm_offset:.2f}**")
 df = result.df
 
+with _ai_button_slot:
+    if not settings.anthropic_api_key:
+        _ai_block = "Dugme radi kad upišeš ANTHROPIC_API_KEY u .env."
+    elif result.offer_is_today is False:
+        _ai_block = "Ponuda nije za današnje mečeve. Prvo povuci novu ponudu."
+    else:
+        _ai_block = ""
+    if st.button("🤖 Napravi AI izvještaj sada", key="ai_report_btn", disabled=bool(_ai_block), **WIDE_BTN,
+                 help="Jedan poziv Claude API-ja nad trenutnom tabelom (plaća se po pozivu, obično ispod 0,5 USD)."):
+        with st.spinner("Claude analizira ponudu (obično minut ili dva)..."):
+            try:
+                _new_ai = generate_ai_report(df, settings, injuries=result.injuries_used,
+                                             source_name=st.session_state.get("last_history_file", "") or "aplikacija",
+                                             track_record=model_track_record(settings.history_dir))
+            except AiReportError as e:
+                st.error(str(e))
+            else:
+                st.session_state["ai_flash"] = f"✅ Novi AI izvještaj je napravljen ({len(_new_ai.data['picks'])} izbora)."
+                st.rerun()
+    st.caption(_ai_block or "Ručni izvještaj se čuva, ali u statistiku ulazi izvještaj dnevnog posla ako tog dana postoji.")
+
 conc = result.concentration
 if conc.teams:
     st.markdown("---")
@@ -553,7 +633,12 @@ if _sc1.button("🔄 Poravnaj nove analize", help="Povlači game log sa NBA Stat
     with st.spinner("Povlačim stvarne rezultate i poravnavam..."):
         _msgs: list = []
         try:
-            _events = settle_history(settings.history_dir, stake=1.0, log=_msgs.append, closing_dir=settings.data_dir)
+            _provider = cached_provider()   # isti game log za model i za AI izbore
+            _events = settle_history(settings.history_dir, provider=_provider, stake=1.0, log=_msgs.append,
+                                     closing_dir=settings.data_dir)
+            if _ai_dir.is_dir():
+                settle_history(_ai_dir, provider=_provider, stake=1.0, closing_dir=settings.data_dir,
+                               log=lambda m: _msgs.append("🤖 AI izbori — " + m))
             _n = {k: sum(1 for e in _events if e["status"] == k) for k in ("settled", "pending", "no_data", "error", "superseded")}
             _sc2.success(f"Poravnato: {_n['settled']} | čeka mečeve: {_n['pending']} | game log još nema datum: {_n['no_data']} | "
                          f"greške: {_n['error']} | nisu zvanične za svoj dan: {_n['superseded']}")
@@ -587,6 +672,44 @@ else:
             st.dataframe(_sd[_scols], **WIDE_DF)
         else:
             st.write("Fajl sa detaljima nije pronađen.")
+    with st.expander("📅 Model po mjesecima"):
+        st.dataframe(monthly_summary(_ledger), hide_index=True, **WIDE_DF)
+
+st.markdown("---")
+st.subheader("🤖 AI izbori — zasebna statistika")
+st.caption("Deset najsigurnijih opklada koje Claude izabere svaki dan poravnava se isto kao model, ali u vlastitu "
+           "evidenciju (history/ai/). Tabela po mjesecima je konačan zbir za svaki mjesec.")
+_ai_ledger = load_ledger(_ai_dir)   # ponovo: dugme za poravnanje iznad je moglo dodati nove redove
+if _ai_ledger.empty:
+    st.info("Još nema poravnatih AI izbora. Prvi rezultat se pojavi dan poslije prvog AI izvještaja "
+            "(dnevni posao ih poravnava sam, ili klikni „Poravnaj nove analize“).")
+else:
+    _ao = overall_summary(load_all_settled(_ai_dir), stake=1.0)
+    _a1, _a2, _a3, _a4, _a5 = st.columns(5)
+    _a1.metric("Opklada", _ao["Bets"])
+    _a2.metric("Pogodak", f"{_ao['Accuracy %']}%")
+    _a3.metric("ROI", f"{_ao['ROI %']}%")
+    _a4.metric("Profit", f"{_ao['Profit']:+.2f}")
+    _a5.metric("Dana", _ao["Days"])
+    st.caption(f"{_ao['Wins']}-{_ao['Losses']}-{_ao['Pushes']} | void {_ao['Void']}")
+    st.markdown("**Po mjesecima — AI izbori (10 dnevno)**")
+    st.dataframe(monthly_summary(_ai_ledger), hide_index=True, **WIDE_DF)
+    st.markdown("**Po mjesecima — model (svi pickovi), za poređenje**")
+    st.dataframe(monthly_summary(_ledger), hide_index=True, **WIDE_DF)
+    with st.expander("AI izbori po danu"):
+        st.dataframe(_ai_ledger.sort_values("Game Date", ascending=False), **WIDE_DF)
+    with st.expander("Detalji po izboru (zadnji poravnati dan)"):
+        _ai_last = _ai_dir / f"settled_{_ai_ledger.sort_values('Game Date').iloc[-1]['Analysis']}"
+        if _ai_last.exists():
+            _asd = pd.read_csv(_ai_last)
+            _acols = [c for c in ("AI Rank", "Player", "TEAM_ABBR", "OPP_TEAM", "Model Pick", "Engine Pick", "Line",
+                                  "Actual Points", "Bet Result", "Used Odds", "Profit", "AI Confidence %") if c in _asd.columns]
+            st.dataframe(_asd[_acols], **WIDE_DF)
+        else:
+            st.write("Fajl sa detaljima nije pronađen.")
+if _ai_report:
+    with st.expander(f"Zadnji AI izvještaj — tabela ({_ai_report.get('game_date')})"):
+        st.dataframe(picks_table(_ai_report), hide_index=True, **WIDE_DF)
 
 
 # =====================================================

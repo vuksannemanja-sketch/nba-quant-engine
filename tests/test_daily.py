@@ -35,11 +35,12 @@ def test_run_daily_runs_stages_in_order_and_isolates_failures(tmp_path, monkeypa
         calls.append("offer")
         return "SKIP: nema ključa"
 
-    runners = {"refresh": ok("refresh"), "settle": boom, "offer": skip, "analyze": ok("analyze"), "push": ok("push")}
+    runners = {"refresh": ok("refresh"), "settle": boom, "offer": skip, "analyze": ok("analyze"), "ai": ok("ai"),
+               "push": ok("push")}
     lines = []
     report = run_daily(_settings(tmp_path), log=lines.append, runners=runners, log_dir=tmp_path / "logs")
-    assert calls == ["refresh", "settle", "offer", "analyze"]  # push samo uz push=True
-    assert [s.status for s in report.stages] == ["ok", "failed", "skipped", "ok"]
+    assert calls == ["refresh", "settle", "offer", "analyze", "ai"]  # push samo uz push=True
+    assert [s.status for s in report.stages] == ["ok", "failed", "skipped", "ok", "ok"]
     assert report.stages[1].message == "NBA Stats ne odgovara"
     assert report.stages[2].message == "nema ključa"
     assert not report.ok and len(report.failed) == 1
@@ -47,7 +48,7 @@ def test_run_daily_runs_stages_in_order_and_isolates_failures(tmp_path, monkeypa
     # log fajl i zadnji izvještaj
     assert Path(report.log_path).exists() and "NBA Stats ne odgovara" in Path(report.log_path).read_text()
     last = load_last_report(tmp_path / "logs")
-    assert last["ok"] is False and [s["name"] for s in last["stages"]] == ["refresh", "settle", "offer", "analyze"]
+    assert last["ok"] is False and [s["name"] for s in last["stages"]] == ["refresh", "settle", "offer", "analyze", "ai"]
 
     calls.clear()
     report2 = run_daily(_settings(tmp_path), runners=runners, push=True, stages=["refresh", "push"],

@@ -5,8 +5,9 @@ Komande:
   analyze      pokreni dnevnu analizu nad ponudom i ispiši najbolje pickove
   fetch-offer  povuci današnju ponudu sa The Odds API u data/offer_latest.csv
   settle       poravnaj snimljene analize sa stvarnim poenima (automatska evaluacija)
+  ai           AI izvještaj: Claude bira 10 najsigurnijih opklada iz današnje analize (--report: statistika)
   refresh      osvježi CSV podatke (NBA Stats, ESPN, The Odds API)
-  daily        dnevni posao: refresh → settle → fetch-offer → analyze (→ --push na GitHub)
+  daily        dnevni posao: refresh → settle → fetch-offer → analyze → ai (→ --push na GitHub)
   schedule     podesi/ukloni/provjeri dnevno pokretanje na ovom računaru (macOS launchd)
   check        provjeri podešavanja, podatke i zavisnosti
 """
@@ -68,6 +69,12 @@ def cmd_check(args) -> int:
         print("streamlit: ✅ instaliran")
     except ImportError:
         print("streamlit: ❌ nije instaliran (pip install streamlit)")
+    try:
+        import anthropic  # noqa: F401
+        print(f"anthropic: ✅ instaliran — AI izvještaj koristi model {settings.ai_model}"
+              + ("" if settings.anthropic_api_key else " (ANTHROPIC_API_KEY nije postavljen u .env, pa se ne pravi)"))
+    except ImportError:
+        print("anthropic: ❌ nije instaliran (pip install anthropic) — AI izvještaj neće raditi")
     return 0
 
 
@@ -181,30 +188,76 @@ def cmd_refresh(args) -> int:
     return 0 if report.ok else 1
 
 
+def _print_ledger_report(hist: Path, stake: float, last: int, empty_msg: str) -> None:
+    """Ispis ledgera: po analizi, po mjesecima i ukupno (isti za model i za AI izbore)."""
+    from .settle import load_all_settled, load_ledger, monthly_summary, overall_summary
+    ledger = load_ledger(hist)
+    if ledger.empty:
+        print(empty_msg)
+        return
+    cols = ["Game Date", "Analysis", "Picks", "Settled", "Wins", "Losses", "Pushes", "Void", "Accuracy %",
+            "Profit", "ROI %", "MAE", "Grade"]
+    print("\n📊 Po analizi:")
+    _print_df(ledger.sort_values("Game Date")[cols].tail(last))
+    print("\n📅 Po mjesecima:")
+    _print_df(monthly_summary(ledger))
+    o = overall_summary(load_all_settled(hist), stake=stake)
+    print(f"\n🏁 Ukupno ({o['Days']} analiza): {o['Bets']} opklada, {o['Wins']}-{o['Losses']}-{o['Pushes']} (void {o['Void']}) | "
+          f"pogodak {o['Accuracy %']} % | profit {o['Profit']:+.2f} | ROI {o['ROI %']:+.2f} % | MAE {o['MAE']} | ocjena {o['Grade']}")
+
+
 def cmd_settle(args) -> int:
-    from .settle import load_all_settled, load_ledger, overall_summary, settle_history
+    from .settle import cached_provider, settle_history
     settings = _settings_from_args(args)
     hist = Path(getattr(args, "history_dir", None) or settings.history_dir)
+    ai_hist = settings.ai_history_dir
     if not args.report:
         print(f"📒 Poravnanje analiza iz {hist} sa stvarnim poenima (NBA Stats game log)...")
-        events = settle_history(hist, stake=args.stake, force=args.force, log=print, closing_dir=settings.data_dir)
+        provider = cached_provider()
+        events = settle_history(hist, provider=provider, stake=args.stake, force=args.force, log=print,
+                                closing_dir=settings.data_dir)
         n = {k: sum(1 for e in events if e["status"] == k) for k in ("settled", "pending", "no_data", "error", "superseded")}
         print(f"Poravnato: {n['settled']} | čeka mečeve: {n['pending']} | game log još nema datum: {n['no_data']} | "
               f"greške: {n['error']} | nisu zvanične za svoj dan: {n['superseded']}")
         for e in events:
             if e["status"] in ("pending", "error"):
                 print(f"  · {e['Analysis']}: {e['detail']}")
-    ledger = load_ledger(hist)
-    if ledger.empty:
-        print("Ledger je prazan — još nema poravnatih analiza (snimaju se samo analize ponude za današnje mečeve).")
+        if ai_hist.is_dir():
+            ai_events = settle_history(ai_hist, provider=provider, stake=args.stake, force=args.force,
+                                       log=lambda m: print("🤖 AI izbori —", m), closing_dir=settings.data_dir)
+            print(f"🤖 AI izbori — poravnato: {sum(1 for e in ai_events if e['status'] == 'settled')}")
+    _print_ledger_report(hist, args.stake, args.last,
+                         "Ledger je prazan — još nema poravnatih analiza (snimaju se samo analize ponude za današnje mečeve).")
+    if ai_hist.is_dir():
+        print("\n🤖 AI izbori (10 najsigurnijih dnevno) — zasebna statistika")
+        _print_ledger_report(ai_hist, args.stake, args.last, "Još nema poravnatih AI izbora.")
+    return 0
+
+
+def cmd_ai(args) -> int:
+    from .ai_report import AiReportError, cost_summary, latest_report, render_markdown, run_for_today
+    settings = _settings_from_args(args)
+    ai_hist = settings.ai_history_dir
+    if args.report:
+        _print_ledger_report(ai_hist, 1.0, args.last, "Još nema poravnatih AI izbora (poravnanje: python -m nba_engine settle).")
+        c = cost_summary(ai_hist)
+        print(f"\n💳 AI izvještaja: {c['reports']} | okvirni trošak ukupno: {c['cost_usd']:.2f} USD")
         return 0
-    cols = ["Game Date", "Analysis", "Picks", "Settled", "Wins", "Losses", "Pushes", "Void", "Accuracy %",
-            "Profit", "ROI %", "MAE", "Grade"]
-    print("\n📊 Po analizi:")
-    _print_df(ledger.sort_values("Game Date")[cols].tail(args.last))
-    o = overall_summary(load_all_settled(hist), stake=args.stake)
-    print(f"\n🏁 Ukupno ({o['Days']} analiza): {o['Bets']} opklada, {o['Wins']}-{o['Losses']}-{o['Pushes']} (void {o['Void']}) | "
-          f"pogodak {o['Accuracy %']} % | profit {o['Profit']:+.2f} | ROI {o['ROI %']:+.2f} % | MAE {o['MAE']} | ocjena {o['Grade']}")
+    try:
+        report, msg = run_for_today(settings, log=print, force=args.force,
+                                    analysis_path=Path(args.analysis) if args.analysis else None)
+    except AiReportError as e:
+        print(f"❌ {e}")
+        return 1
+    if report is None:
+        print("⏭️  " + (msg[6:].strip() if msg.startswith("SKIP") else msg))
+        last = latest_report(ai_hist)
+        if last:
+            print("\nZadnji AI izvještaj:\n")
+            print(render_markdown(last))
+        return 0
+    print("\n" + render_markdown(report.data) + "\n")
+    print(f"✅ {msg}")
     return 0
 
 
@@ -328,10 +381,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_check)
 
     s = sub.add_parser("daily", parents=[common],
-                       help="dnevni posao: refresh → settle → fetch-offer → analyze (→ --push)")
+                       help="dnevni posao: refresh → settle → fetch-offer → analyze → ai (→ --push)")
     s.add_argument("--push", action="store_true", help="na kraju commit-uj data/*.csv i pošalji na GitHub (grana main)")
     s.add_argument("--with-h2h", action="store_true", help="uključi i spori H2H korak u osvježavanju")
-    s.add_argument("--stages", help="samo odabrane faze, odvojene zarezom: refresh,settle,offer,analyze,push")
+    s.add_argument("--stages", help="samo odabrane faze, odvojene zarezom: refresh,settle,offer,analyze,ai,push")
     s.add_argument("--log-dir", help="folder za logove (podrazumijevano: logs/)")
     s.add_argument("--history-dir", help="folder istorije (podrazumijevano: history/)")
     s.set_defaults(func=cmd_daily)
@@ -348,6 +401,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-push", action="store_true", help="dnevni posao bez slanja podataka na GitHub")
     s.add_argument("--with-h2h", action="store_true", help="dnevni posao sa H2H korakom")
     s.set_defaults(func=cmd_schedule)
+
+    s = sub.add_parser("ai", parents=[common],
+                       help="AI izvještaj: Claude bira 10 najsigurnijih opklada iz današnje analize")
+    s.add_argument("--report", action="store_true", help="samo ispiši statistiku AI izbora (bez mreže, bez troška)")
+    s.add_argument("--force", action="store_true", help="napravi novi izvještaj i ako za tu analizu već postoji")
+    s.add_argument("--analysis", help="fajl analize (podrazumijevano: zvanična analiza današnjeg dana iz history/)")
+    s.add_argument("--last", type=int, default=20, help="koliko zadnjih dana ispisati u statistici")
+    s.add_argument("--history-dir", help="folder istorije (podrazumijevano: history/)")
+    s.set_defaults(func=cmd_ai)
 
     s = sub.add_parser("settle", parents=[common],
                        help="poravnaj snimljene analize sa stvarnim poenima (automatska evaluacija)")

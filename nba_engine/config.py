@@ -26,6 +26,12 @@ ENV_HISTORY_DIR = "NBA_HISTORY_DIR"
 ENV_ODDS_KEY = "ODDS_API_KEY"
 ENV_BOOKMAKERS = "ODDS_BOOKMAKERS"
 ENV_REGIONS = "ODDS_REGIONS"
+ENV_ANTHROPIC_KEY = "ANTHROPIC_API_KEY"
+ENV_AI_MODEL = "ANTHROPIC_MODEL"
+
+# AI izvještaj (nba_engine/ai_report.py): Claude model i podfolder istorije u koji se snimaju AI izbori.
+DEFAULT_AI_MODEL = "claude-opus-5-5"
+AI_SUBDIR = "ai"
 
 # Regije kladionica za The Odds API. Svaka regija košta 1 zahtjev po meču; "uk" ne nudi NBA player props
 # (izmjereno 1.11.2026), pa je podrazumijevano us+eu (Pinnacle je u "eu").
@@ -109,13 +115,23 @@ def parse_env_file(path: Path) -> Dict[str, str]:
     return values
 
 
+_DOTENV_LOADED: Dict[str, str] = {}   # šta je load_dotenv sam upisao u os.environ (ključ → vrijednost)
+
+
 def load_dotenv(path: Optional[Path] = None, override: bool = False) -> Dict[str, str]:
-    """Učitaj ``.env`` u ``os.environ``. Postojeće promjenljive se ne gaze (osim uz override)."""
+    """Učitaj ``.env`` u ``os.environ``. Promjenljive postavljene izvan ``.env`` se ne gaze (osim uz override).
+
+    Vrijednost koju je ranije upisao sam ``load_dotenv`` (ili prazna) se osvježava, pa aplikacija koja stalno
+    radi vidi izmjenu ``.env`` fajla (npr. naknadno upisan ključ) bez ponovnog pokretanja.
+    """
     env_path = Path(path) if path else DEFAULT_ENV_FILE
     values = parse_env_file(env_path)
     for key, val in values.items():
-        if override or key not in os.environ:
+        current = os.environ.get(key)
+        ours = key in _DOTENV_LOADED and current == _DOTENV_LOADED[key]
+        if override or not current or ours:
             os.environ[key] = val
+            _DOTENV_LOADED[key] = val
     return values
 
 
@@ -189,6 +205,8 @@ class Settings:
     odds_api_key: str = ""
     bookmaker_priority: Tuple[str, ...] = DEFAULT_BOOKMAKER_PRIORITY
     odds_regions: str = DEFAULT_ODDS_REGIONS
+    anthropic_api_key: str = ""
+    ai_model: str = DEFAULT_AI_MODEL
     season_source: str = "default"
     env_file: Optional[Path] = None
     odds_api_base: str = "https://api.the-odds-api.com/v4"
@@ -218,6 +236,8 @@ class Settings:
             bookmaker_priority=books,
             odds_regions=",".join(r.strip().lower() for r in os.environ.get(ENV_REGIONS, "").split(",") if r.strip())
             or DEFAULT_ODDS_REGIONS,
+            anthropic_api_key=os.environ.get(ENV_ANTHROPIC_KEY, "").strip(),
+            ai_model=os.environ.get(ENV_AI_MODEL, "").strip() or DEFAULT_AI_MODEL,
             season_source=source,
             env_file=env_path if env_path.exists() else None,
         )
@@ -249,6 +269,11 @@ class Settings:
     def offer_latest_path(self) -> Path:
         return self.data_dir / "offer_latest.csv"
 
+    @property
+    def ai_history_dir(self) -> Path:
+        """Folder AI izbora (``history/ai/``): isti format kao history/, pa ga poravnava isti settle."""
+        return self.history_dir / AI_SUBDIR
+
     # -- status ---------------------------------------------------------------
     def data_status(self) -> List[Dict[str, object]]:
         """Pregled fajlova: vrsta, naziv, da li postoji, veličina, starost."""
@@ -268,5 +293,6 @@ class Settings:
 
     def describe(self) -> str:
         key_state = "postavljen" if self.odds_api_key else "NIJE postavljen"
+        ai_state = "postavljen" if self.anthropic_api_key else "NIJE postavljen"
         return (f"sezona={self.season} ({self.season_source}), data={self.data_dir}, "
-                f"history={self.history_dir}, ODDS_API_KEY {key_state}")
+                f"history={self.history_dir}, ODDS_API_KEY {key_state}, ANTHROPIC_API_KEY {ai_state}")

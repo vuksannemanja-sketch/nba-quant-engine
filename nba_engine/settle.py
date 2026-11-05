@@ -294,6 +294,28 @@ def settle_history(history_dir, provider: Optional[ActualsProvider] = None, toda
     return events
 
 
+MONTHLY_COLUMNS = ["Month", "Days", "Bets", "Wins", "Losses", "Pushes", "Void", "Accuracy %", "Staked", "Profit", "ROI %"]
+
+
+def monthly_summary(ledger: pd.DataFrame) -> pd.DataFrame:
+    """Zbir ledgera po mjesecima (po datumu mečeva): jedan red po mjesecu, najnoviji prvi."""
+    if ledger is None or ledger.empty:
+        return pd.DataFrame(columns=MONTHLY_COLUMNS)
+    df = ledger.copy()
+    df["Month"] = df["Game Date"].astype(str).str.slice(0, 7)
+    for c in ("Wins", "Losses", "Pushes", "Void", "Staked", "Profit"):
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+    rows = []
+    for month, g in df.groupby("Month"):
+        wins, losses = int(g["Wins"].sum()), int(g["Losses"].sum())
+        bets, staked, profit = wins + losses, float(g["Staked"].sum()), float(g["Profit"].sum())
+        rows.append({"Month": month, "Days": int(g["Game Date"].nunique()), "Bets": bets, "Wins": wins, "Losses": losses,
+                     "Pushes": int(g["Pushes"].sum()), "Void": int(g["Void"].sum()),
+                     "Accuracy %": round(wins / bets * 100.0, 2) if bets else 0.0, "Staked": round(staked, 2),
+                     "Profit": round(profit, 2), "ROI %": round(profit / staked * 100.0, 2) if staked else 0.0})
+    return pd.DataFrame(rows, columns=MONTHLY_COLUMNS).sort_values("Month", ascending=False).reset_index(drop=True)
+
+
 def load_all_settled(history_dir) -> pd.DataFrame:
     frames = [pd.read_csv(p).assign(Analysis=p.name[len(SETTLED_PREFIX):]) for p in list_history(history_dir, SETTLED_PREFIX)]
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()

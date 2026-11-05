@@ -24,7 +24,7 @@ def _run(*args, **env):
 def test_cli_help_lists_commands():
     r = _run("--help")
     assert r.returncode == 0
-    for cmd in ("ui", "analyze", "fetch-offer", "refresh", "check"):
+    for cmd in ("ui", "analyze", "fetch-offer", "refresh", "check", "settle", "ai", "daily"):
         assert cmd in r.stdout
 
 

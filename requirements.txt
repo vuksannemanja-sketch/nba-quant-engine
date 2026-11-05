@@ -8,5 +8,7 @@ numpy==2.4.6
 requests==2.34.2
 # Osvježavanje podataka sa NBA Stats API-ja
 nba_api==1.12.0
+# AI izvještaj (Claude API)
+anthropic==2.5.0
 # Testovi
 pytest==9.2.0
