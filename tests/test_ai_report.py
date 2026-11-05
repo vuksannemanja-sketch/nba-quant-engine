@@ -132,6 +132,7 @@ def test_candidates_table_and_prompt():
 
     system, user = A.build_prompt(cands, 10, dt.date(2026, 10, 30), "2026-27", inj, "Dosadašnji učinak: OVER 3 od 5.")
     assert "10 NAJSIGURNIJIH" in system and "ijekavicom" in system and "Najviše 3 izbora iz istog meča" in system
+    assert "ne koristi nazive kolona" in system
     assert "30.10.2026" in user and "Igrača u ponudi: 12" in user and "Dosadašnji učinak" in user
     assert "Luka Dončić,LAL,OKC,1,27.5,1.9,1.9" in user and "OBJAŠNJENJE KOLONA" in user
     assert A.build_prompt(cands, 10, dt.date(2026, 10, 30), "2026-27")[1].count("Lista povreda nije dostupna") == 1

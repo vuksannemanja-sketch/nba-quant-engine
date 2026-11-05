@@ -146,7 +146,9 @@ procjene iznad 65 su rijetko opravdane.
 Izvještaj piši na srpskom jeziku, ijekavicom i latinicom, jednostavnim rječnikom:
 - summary: 3 do 5 rečenica o današnjoj ponudi: kakav je dan, šta je glavni rizik i šta korisnik treba da provjeri prije uplate.
 - reason: 2 do 3 rečenice sa konkretnim brojkama iz tabele koje opravdavaju izbor.
-- risk: jedna rečenica o tome šta može pokvariti opkladu."""
+- risk: jedna rečenica o tome šta može pokvariti opkladu.
+- U tekstu ne koristi nazive kolona iz tabele (na primjer prior_w, inj_boost, usg, def_factor) ni stručne skraćenice. \
+Isto reci običnim riječima, onako kako bi objasnio prijatelju koji prati košarku."""
 
 
 class AiReportError(RuntimeError):
