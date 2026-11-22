@@ -9,6 +9,7 @@ Komande:
   refresh      osvježi CSV podatke (NBA Stats, ESPN, The Odds API)
   daily        dnevni posao: refresh → settle → fetch-offer → analyze → ai (→ --push na GitHub)
   schedule     podesi/ukloni/provjeri dnevno pokretanje na ovom računaru (macOS launchd)
+  v2           v2 u sjeni: izvještaj poređenja, poravnanje, kalibracija i provjera unazad
   check        provjeri podešavanja, podatke i zavisnosti
 """
 from __future__ import annotations
@@ -274,6 +275,17 @@ def cmd_daily(args) -> int:
 
 def cmd_schedule(args) -> int:
     from . import scheduler
+    if args.install_closing:
+        try:
+            scheduler.install_closing(log=print)
+        except RuntimeError as e:
+            print(f"❌ {e}")
+            return 1
+        print("ℹ️  Računar mora biti uključen (ili da spava) u ta vremena; ugašen računar preskače snimak.")
+        return 0
+    if args.remove_closing:
+        scheduler.remove_closing(log=print)
+        return 0
     if args.install:
         try:
             scheduler.install(hour=args.hour, minute=args.minute, push=not args.no_push, with_h2h=args.with_h2h,
@@ -296,6 +308,8 @@ def cmd_schedule(args) -> int:
         return 0
     for line in scheduler.status_lines(scheduler.status()):
         print(line)
+    for line in scheduler.closing_status_lines(scheduler.closing_status()):
+        print(line)
     from .daily import load_last_report
     rep = load_last_report()
     if rep:
@@ -303,6 +317,32 @@ def cmd_schedule(args) -> int:
         for st in rep.get("stages", []):
             icon = {"ok": "✅", "skipped": "⏭️", "failed": "❌"}.get(st.get("status"), "❔")
             print(f"   {icon} {st.get('name')}: {st.get('message')}")
+    return 0
+
+
+def cmd_v2(args) -> int:
+    from . import v2_eval
+    from .settle import load_all_settled
+    settings = _settings_from_args(args)
+    done = False
+    if args.settle:
+        print("▶️ ", v2_eval.settle_v2(settings, log=print))
+        done = True
+    if args.calibrate:
+        import json
+        from .v2 import CALIBRATION_FILE
+        cal = v2_eval.calibrate_from_history(settings)
+        if not cal["buckets"]:
+            print("❌ Nema dovoljno poravnatih podataka za kalibraciju.")
+            return 1
+        CALIBRATION_FILE.write_text(json.dumps(cal, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"✅ Kalibracija snimljena u {CALIBRATION_FILE} (uzoraka {cal['n']}, grupa {len(cal['buckets'])})")
+        done = True
+    if args.backtest:
+        print(v2_eval.render_walk_forward(v2_eval.walk_forward(load_all_settled(settings.history_dir))))
+        done = True
+    if args.report or not done:
+        print(v2_eval.render_overview(v2_eval.v2_overview(settings)))
     return 0
 
 
@@ -395,12 +435,25 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--install", action="store_true", help="podesi (ili zamijeni) dnevni posao")
     g.add_argument("--remove", action="store_true", help="ukloni dnevni posao")
     g.add_argument("--status", action="store_true", help="prikaži stanje (podrazumijevano)")
+    g.add_argument("--install-closing", action="store_true",
+                   help="podesi snimanje zatvorenih linija (00:45, 01:45, 02:45 i 03:45) za mjerenje CLV")
+    g.add_argument("--remove-closing", action="store_true", help="ukloni snimanje zatvorenih linija")
     g.add_argument("--show", action="store_true", help="samo ispiši plist i cron liniju, ništa ne mijenjaj")
     s.add_argument("--hour", type=int, default=22, help="sat pokretanja, 0–23 (podrazumijevano 22)")
     s.add_argument("--minute", type=int, default=30, help="minut pokretanja (podrazumijevano 30)")
     s.add_argument("--no-push", action="store_true", help="dnevni posao bez slanja podataka na GitHub")
     s.add_argument("--with-h2h", action="store_true", help="dnevni posao sa H2H korakom")
     s.set_defaults(func=cmd_schedule)
+
+    s = sub.add_parser("v2", parents=[common],
+                       help="v2 u sjeni: izvještaj (podrazumijevano), --settle, --calibrate, --backtest")
+    s.add_argument("--report", action="store_true", help="ispiši poređenje v2 / jednostavna pravila / stari model / AI")
+    s.add_argument("--settle", action="store_true", help="poravnaj v2 izbore i cijeli spisak (mreža)")
+    s.add_argument("--calibrate", action="store_true",
+                   help="napravi novu kalibraciju raspona iz poravnatih podataka (piše nba_engine/v2_calibration.json)")
+    s.add_argument("--backtest", action="store_true", help="provjera unazad po danima na poravnatim v1 izborima")
+    s.add_argument("--history-dir", help="folder istorije (podrazumijevano: history/)")
+    s.set_defaults(func=cmd_v2)
 
     s = sub.add_parser("ai", parents=[common],
                        help="AI izvještaj: Claude bira 10 najsigurnijih opklada iz današnje analize")

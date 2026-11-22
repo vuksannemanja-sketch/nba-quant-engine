@@ -30,6 +30,7 @@ from nba_engine.schedule import STATE_ICON, fetch_schedule_context, games_for_da
 from nba_engine.settle import (cached_provider, load_all_settled, load_ledger, monthly_summary, overall_summary,
                                settle_history)
 from nba_engine.utils import normalize_name, smart_decode
+from nba_engine.v2_eval import latest_v2_picks, v2_overview
 
 
 def _wide(fn):
@@ -710,6 +711,58 @@ else:
 if _ai_report:
     with st.expander(f"Zadnji AI izvještaj — tabela ({_ai_report.get('game_date')})"):
         st.dataframe(picks_table(_ai_report), hide_index=True, **WIDE_DF)
+
+
+# =====================================================
+# v2 (u sjeni): tržište kao osnova; zasebna evidencija u history/v2/
+# =====================================================
+
+st.markdown("---")
+st.subheader("🧪 v2 (u sjeni) — tržište kao osnova")
+st.caption("v2 radi uporedo sa starim modelom i ne mijenja ga. Početna vjerovatnoća je fer cijena tržišta (bez marže); "
+           "model dobija težinu tek kad je poravnata statistika opravda. Poređenje je na istim danima i sa jednostavnim pravilima.")
+try:
+    _v2_name, _v2_picks, _v2_n = latest_v2_picks(settings)
+    _v2o = v2_overview(settings)
+    if _v2_name is None:
+        st.info("v2 još nije radio. Prvi v2 izbori se pojave poslije prvog dnevnog posla (22:30), a prvi rezultati dan kasnije.")
+    else:
+        st.markdown(f"**Zadnji v2 spisak:** {_v2_name} — igrača {_v2_n}, izbora {len(_v2_picks)}")
+        if _v2_picks.empty:
+            st.caption("Danas nema izbora: nijedna kvota nije dovoljno iznad fer cijene. To je ispravan ishod.")
+        else:
+            st.dataframe(_v2_picks, hide_index=True, **WIDE_DF)
+    _v2c = _v2o["comparison"]
+    if _v2c.empty:
+        st.caption("Poređenje se pojavi kad se prvi v2 dan poravna.")
+    else:
+        st.markdown("**Poređenje na istim danima** (prag rentabilnosti ≈ 1 / prosječna kvota)")
+        st.dataframe(_v2c, hide_index=True, **WIDE_DF)
+    _c1, _c2, _c3 = st.columns(3)
+    _w = _v2o["weight"]
+    _c1.metric("Težina modela iznad tržišta",
+               f"{_w['weight']:+.2f}" if _w.get("weight") is not None else "premalo podataka",
+               help="0 = model ne dodaje ništa tržištu, 1 = bolji nego što tržište priznaje. Podiže se tek kad je 95 % raspon iznad nule.")
+    if _w.get("weight") is not None:
+        _c1.caption(f"95 % raspon {_w['lo']:+.2f} do {_w['hi']:+.2f} ({_w['n']} igrača)")
+    _clv = _v2o["clv"]
+    _c2.metric("Završna vrijednost (CLV)", f"{_clv['mean']:+.2f} %" if _clv.get("n") else "nema podataka",
+               help="Koliko je naša kvota bila iznad fer cijene na zatvaranju. Dosljedno pozitivno = stvarna prednost.")
+    _c2.caption(f"izbora sa zatvorenom linijom: {_clv['n']}" if _clv.get("n") else
+                "uključi: python -m nba_engine schedule --install-closing")
+    _c3.metric("Poravnatih dana", _v2o["days"])
+    st.markdown("**Pregledi unaprijed** (prije toga se ne tvrdi da prednost postoji)")
+    for _g in _v2o["gates"]:
+        st.progress(min(_g["Gotovo %"] / 100.0, 1.0), text=f"{_g['Pregled']}: {_g['Izbora']} / {_g['Cilj']}")
+    with st.expander("Obećano naspram ostvareno (kalibracija)"):
+        for _col, _t in _v2o["calibration"].items():
+            st.markdown(f"**{_col}**")
+            if _t.empty:
+                st.caption("Još nema poravnatih igrača.")
+            else:
+                st.dataframe(_t, hide_index=True, **WIDE_DF)
+except Exception as e:  # noqa: BLE001 — v2 je u sjeni i ne smije srušiti ostatak stranice
+    st.warning(f"v2 odjeljak nije dostupan: {e}")
 
 
 # =====================================================

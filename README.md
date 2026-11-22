@@ -38,6 +38,8 @@ python -m nba_engine ui
 | `python -m nba_engine daily` | dnevni posao u jednom potezu: refresh → settle → fetch-offer → analyze → ai (uz `--push` i slanje podataka na GitHub) |
 | `python -m nba_engine ai` | AI izvještaj: Claude bira 10 najsigurnijih opklada iz današnje analize; `--report` ispisuje statistiku AI izbora |
 | `python -m nba_engine schedule --install` | podešava da se `daily` sam pokreće svaki dan na ovom računaru (macOS launchd); `--status`, `--remove` |
+| `python -m nba_engine schedule --install-closing` | podešava snimanje zatvorenih linija (00:45, 01:45, 02:45 i 03:45) za mjerenje CLV; `--remove-closing` |
+| `python -m nba_engine v2` | v2 u sjeni: poređenje sa jednostavnim pravilima, starim modelom i AI izborima; `--settle`, `--calibrate`, `--backtest` |
 
 Korisne opcije: `analyze --offer PUTANJA --top 20 --min-ev 5 --only-positive --no-schedule`,
 `refresh --steps players,injuries` (samo odabrani koraci), `--season 2026-27`, `--data-dir /drugi/folder`.
@@ -171,6 +173,45 @@ pa osvježavanje podataka radi pouzdano samo sa kućnog računara. Na Linuxu `sc
 Za potpunu automatsku evaluaciju treba samo jedno: ključ The Odds API u `.env` na ovom računaru. Od tada se svaki
 dan snima analiza, a sutradan poravnava sa stvarnim poenima.
 
+## v2 (u sjeni): tržište kao osnova
+
+Pregled od 22.11.2026 (`docs/PREGLED_2026-11-22.md`, 20 dana, 1.370 izbora) pokazao je da odstupanje modela od granice
+kladionice ne predviđa ishod, da je raspon (sigma) preuzak za igrače sa niskom granicom i da rang po True Score nema
+veze sa ishodom. v2 zato radi **uporedo** sa starim modelom, ne mijenja ga i piše u zasebnu evidenciju `history/v2/`.
+
+- **Fer vjerovatnoća** je tržišna: kvote Pinnacle-a na istoj liniji bez marže; bez Pinnacle-a prosjek najmanje tri
+  kladionice sa istom linijom; bez toga igrač ne ulazi u izbor.
+- **Model** računa svoju vjerovatnoću sa stvarnim ostacima po grupi granice (`nba_engine/v2_calibration.json`,
+  `v2 --calibrate`), ali ulazi u konačnu vjerovatnoću samo sa težinom `V2_MODEL_WEIGHT` iz `.env`
+  (podrazumijevano **0**). Težina se podiže tek kad ocjena u aplikaciji („Težina modela iznad tržišta“) pokaže da je
+  95 % raspon iznad nule.
+- **Izbor**: najbolja kvota na istoj liniji, očekivana vrijednost najmanje +1 % nad fer cijenom; kvota više od 15 %
+  iznad fer cijene je sumnjiva (zastarjela linija) i preskače se. Najviše 10 izbora dnevno i 3 po utakmici; dan bez
+  izbora je ispravan ishod.
+- **Evidencija**: `history/v2/analysis_*` (cijeli spisak igrača), `settled_*` i `ledger.csv` (izbori),
+  `universe_settled_*` (cijeli spisak sa ishodima) i `benchmarks.csv` (po danu: v2, „uvijek manje“, „uvijek više“,
+  „strana koju tržište smatra vjerovatnijom“, nasumična strana). Poređenje i kalibracija: `python -m nba_engine v2`
+  i odjeljak „🧪 v2 (u sjeni)“ u aplikaciji.
+- **Dnevni posao**: v2 se računa odmah poslije v1 u fazi `analyze`, a poravnava u fazi `settle`. Greška v2 nikad
+  ne ruši ni ne mijenja stari model.
+- **Sve kvote po kladionici** se od sada snimaju u `data/quotes_<datum>.csv` (bez dodatnih API zahtjeva).
+- **Zatvorene linije (CLV)**: `schedule --install-closing` podešava `fetch-offer --closing` u 00:45, 01:45, 02:45 i 03:45
+  (posebna launchd usluga). Snimak se imenuje po američkom datumu mečeva, uzima samo mečeve koji još nisu počeli i
+  počinju u narednih ~4 h (stara linija snimljena pri kasnom pokretanju se ne prihvata) i mijenja samo redove igrača
+  koje je ponovo povukao, pa svaki igrač dobija zadnju liniju prije svog meča (`data/closing_<datum>.csv` i
+  `data/closing_quotes_<datum>.csv`). Trošak oko 60 API zahtjeva dnevno. Kad se linija pomjerila, CLV se računa
+  pomjeranjem fer vjerovatnoće na našu liniju (normalna aproksimacija sa izmjerenim rasponom).
+- **Pregledi unaprijed**: prvi na 500 izbora sa zatvorenom linijom (CLV), drugi na 2.000 izbora (pogodak i ROI).
+  Prije toga se ne tvrdi da prednost postoji.
+- **Provjera unazad**: `python -m nba_engine v2 --backtest` svaki dan uči kalibraciju samo iz ranijih dana i mjeri
+  grešku vjerovatnoće na neviđenom danu (stari model, tržište, model sa ispravnim rasponom, mješavine).
+  Na 20 dana: tržište 0,2491, bacanje novčića 0,2500, stari model 0,2615, model sa ispravnim rasponom 0,2586.
+
+`v2 --calibrate` prepisuje praćeni fajl `nba_engine/v2_calibration.json`; dok se ne commit-uje, slanje podataka na GitHub
+se preskače (zaštita od izmjena koda). Commit ide kroz PR.
+
+Ograničenje: ponuda (Pinnacle i američke kladionice) ne mora biti dostupna kladionicama koje igrač stvarno koristi, pa je ROI u v2 „na papiru“.
+
 ## Ulazi modela iz grupe B (uključeni, mogu se isključiti)
 
 Formule su iste kao u starom `app.py`; mijenjaju se samo ulazi. Sva tri prekidača su u bočnoj traci
@@ -187,7 +228,8 @@ Formule su iste kao u starom `app.py`; mijenjaju se samo ulazi. Sva tri prekida�
 Kvote: `fetch-offer` za svakog igrača uzima liniju od kladionice najvišeg prioriteta, a kvote najbolju Over i najbolju
 Under među kladionicama koje nude **istu** liniju (detalji po kladionici u `data/offer_books_<datum>.csv`;
 `--single-book` isključuje). `fetch-offer --closing` snima zatvorene linije u `data/closing_<datum>.csv` i tada
-`settle` računa i CLV. Taj drugi poziv troši API zahtjeve, pa nije u dnevnom robotu.
+`settle` računa i CLV. Taj drugi poziv troši API zahtjeve, pa nije u dnevnom poslu nego u posebnoj usluzi
+(`schedule --install-closing`, vidi „v2 u sjeni“).
 
 ## Šta se računa automatski i koje zaštite postoje
 
@@ -250,6 +292,9 @@ nba_engine/
   settle.py             automatska evaluacija (poravnanje sa stvarnim poenima)
   prior.py              dopuna rane sezone prošlom sezonom
   ai_report.py          AI izvještaj: Claude bira 10 najsigurnijih opklada (history/ai/)
+  v2.py                 v2 u sjeni: fer cijena tržišta, model sa stvarnim ostacima, izbor (history/v2/)
+  v2_eval.py            v2: poravnanje cijelog spiska, jednostavna pravila, CLV, kalibracija, provjera unazad
+  v2_calibration.json   stvarni ostaci po grupi granice (osvježava se sa `v2 --calibrate`)
   daily.py              dnevni posao (sve faze redom, log, slanje na GitHub)
   scheduler.py          dnevno pokretanje na računaru (macOS launchd)
   __main__.py           komandna linija

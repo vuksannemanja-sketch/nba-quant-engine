@@ -32,6 +32,9 @@ ENV_AI_MODEL = "ANTHROPIC_MODEL"
 # AI izvještaj (nba_engine/ai_report.py): Claude model i podfolder istorije u koji se snimaju AI izbori.
 DEFAULT_AI_MODEL = "claude-opus-5-5"
 AI_SUBDIR = "ai"
+# v2 (u sjeni, nba_engine/v2.py): zasebna istorija da se stari bilans (history/) ne dira.
+V2_SUBDIR = "v2"
+ENV_V2_MODEL_WEIGHT = "V2_MODEL_WEIGHT"   # težina modela iznad tržišta (0 = samo tržište); podrazumijevano 0
 
 # Regije kladionica za The Odds API. Svaka regija košta 1 zahtjev po meču; "uk" ne nudi NBA player props
 # (izmjereno 1.11.2026), pa je podrazumijevano us+eu (Pinnacle je u "eu").
@@ -268,6 +271,11 @@ class Settings:
 
     def offer_latest_path(self) -> Path:
         return self.data_dir / "offer_latest.csv"
+
+    @property
+    def v2_history_dir(self) -> Path:
+        """Folder v2 izbora (``history/v2/``): isti format kao history/, pa ga poravnava isti settle."""
+        return self.history_dir / V2_SUBDIR
 
     @property
     def ai_history_dir(self) -> Path:

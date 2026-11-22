@@ -2,9 +2,10 @@
 
 Faze (greška u jednoj ne zaustavlja ostale):
   refresh   osvježi CSV podatke sa NBA Stats i ESPN (igrači/timovi, ozljede, matchup+forma, raspored)
-  settle    poravnaj ranije snimljene analize sa stvarnim poenima (automatska evaluacija)
+  settle    poravnaj ranije snimljene analize sa stvarnim poenima (automatska evaluacija), uključujući AI i v2
   offer     povuci današnju ponudu sa The Odds API (preskače se ako ODDS_API_KEY nije postavljen)
-  analyze   analiziraj ponudu i snimi rezultat u history/ (samo ako je ponuda za današnje mečeve)
+  analyze   analiziraj ponudu i snimi rezultat u history/ (samo ako je ponuda za današnje mečeve);
+            odmah poslije toga radi v2 u sjeni (history/v2/), čija greška ne dira stari model
   ai        AI izvještaj: Claude bira 10 najsigurnijih opklada iz te analize (preskače se bez ANTHROPIC_API_KEY)
   push      (opcija ``--push``) commit-uj izmijenjene CSV podatke i pošalji ih na GitHub (grana main)
 
@@ -162,6 +163,12 @@ def stage_settle(settings: Settings, log: Logger) -> str:
                                    log=lambda m: log("🤖 AI izbori — " + m))
         a = {k: sum(1 for e in ai_events if e["status"] == k) for k in ("settled", "pending", "no_data", "error")}
         msg += f" | AI izbori: poravnato {a['settled']}, čeka mečeve {a['pending'] + a['no_data']}, greške {a['error']}"
+    try:                                 # v2 (u sjeni): izbori, cijeli spisak i poređenja; greška ne dira ostalo
+        from .v2_eval import settle_v2
+        msg += " | " + settle_v2(settings, provider=provider, log=log)
+    except Exception as e:  # noqa: BLE001
+        log(f"⚠️ v2 poravnanje nije uspjelo: {e}")
+        msg += f" | ⚠️ v2 poravnanje nije uspjelo: {e}"
     return msg
 
 
@@ -207,7 +214,20 @@ def stage_analyze(settings: Settings, log: Logger, top: int = 10) -> str:
     log("\n" + summary_table(result.df, top).to_string(index=False) + "\n")
     path = save_analysis(result.df, settings.history_dir, tag=DAILY_TAG)  # zvanična analiza dana za evaluaciju
     fresh = "" if result.offer_is_today else " (ESPN raspored nedostupan — svježina ponude nije provjerena)"
-    return f"{len(result.df)} pickova snimljeno u {path.name}{fresh}"
+    return f"{len(result.df)} pickova snimljeno u {path.name}{fresh}" + _v2_after_analysis(result, bundle, options, settings, log)
+
+
+def _v2_after_analysis(result, bundle, options, settings: Settings, log: Logger) -> str:
+    """v2 radi u sjeni, poslije v1: nikad ne smije promijeniti ni srušiti analizu starog modela."""
+    try:
+        from .v2 import run_v2
+        res = run_v2(result.projections, settings, log=log, mc_sims=options.mc_sims,
+                     league_pts_std=bundle.league_pts_std, seed=options.seed)
+        return " | " + res.message
+    except Exception as e:  # noqa: BLE001
+        log(f"⚠️ v2 nije uspio: {e}")
+        log(traceback.format_exc().rstrip())
+        return f" | ⚠️ v2 nije uspio: {e}"
 
 
 def stage_ai(settings: Settings, log: Logger) -> str:
