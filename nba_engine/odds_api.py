@@ -21,6 +21,8 @@ from .utils import normalize_name
 
 OFFER_COLUMNS = ["PLAYER", "PLAYER_TEAM", "LINE", "OVER_ODDS", "UNDER_ODDS", "OPP_TEAM", "TOTAL_MATCH"]
 OFFER_DETAIL_COLUMNS = OFFER_COLUMNS + ["BOOKMAKER", "OVER_BOOK", "UNDER_BOOK", "N_BOOKS", "N_BOOKS_SAME_LINE"]
+# sve kvote po kladionici (dugi format): osnova za "fer" vjerovatnoću u v2 i za zatvorene linije
+QUOTES_COLUMNS = ["PLAYER", "PLAYER_TEAM", "OPP_TEAM", "BOOK", "LINE", "OVER_ODDS", "UNDER_ODDS", "SNAPSHOT"]
 SPORT_KEY = "basketball_nba"
 
 Logger = Callable[[str], None]
@@ -76,6 +78,33 @@ def select_events_for_game_date(events: Sequence[dict], game_date: _dt.date) -> 
         d = event_game_date(ev)
         (kept if d is None or d == game_date else skipped).append(ev)
     return kept, skipped
+
+
+def select_unstarted_events(events: Sequence[dict], now: Optional[_dt.datetime] = None) -> Tuple[List[dict], List[dict]]:
+    """(još nisu počeli, počeli): za snimak zatvorenih linija; mečevi bez poznatog početka se zadržavaju."""
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=_dt.timezone.utc)
+    kept, started = [], []
+    for ev in events:
+        ts = event_start_utc(ev)
+        (started if ts is not None and ts <= now else kept).append(ev)
+    return kept, started
+
+
+def merge_snapshot(path: Path, new: pd.DataFrame, key: str = "PLAYER") -> pd.DataFrame:
+    """Novi snimak zamjenjuje redove istih igrača u postojećem fajlu; igrači iz drugih mečeva ostaju.
+    Tako više snimaka u noći (npr. 00:45 i 03:30) daje za svakog igrača zadnju liniju prije početka njegovog meča."""
+    path = Path(path)
+    if path.exists():
+        try:
+            old = pd.read_csv(path)
+        except Exception:  # noqa: BLE001 — oštećen fajl se piše iznova
+            old = pd.DataFrame()
+        if not old.empty and key in old.columns and key in new.columns:
+            old = old[~old[key].isin(set(new[key]))]
+            new = pd.concat([old, new], ignore_index=True)
+    return new
 
 
 def quota_warning(remaining, spent_today: int, today: _dt.date) -> Optional[str]:
@@ -271,12 +300,14 @@ def order_bookmakers(bookmakers: List[dict], priority: Sequence[str]) -> List[di
 
 def extract_player_props(data: dict, home_abbr: str, away_abbr: str, total_match: Optional[float],
                          players_df: Optional[pd.DataFrame], priority: Sequence[str] = (),
-                         log: Optional[Logger] = None, best_odds: bool = True) -> List[dict]:
+                         log: Optional[Logger] = None, best_odds: bool = True,
+                         quotes_out: Optional[List[dict]] = None, snapshot: str = "") -> List[dict]:
     """Iz odgovora za jedan meč napravi redove ponude.
 
     Linija igrača dolazi od kladionice najvišeg prioriteta koja ga nudi. Kvote: uz ``best_odds`` najbolja Over
     i najbolja Under među kladionicama koje nude ISTU liniju (druga linija se ne miješa), inače kvote te iste
     kladionice. Svaki red nosi i detalje (BOOKMAKER, OVER_BOOK, UNDER_BOOK, N_BOOKS, N_BOOKS_SAME_LINE).
+    ``quotes_out``: ako je zadat, u njega se dodaju SVE kvote po kladionici (QUOTES_COLUMNS) — ponuda se ne mijenja.
     """
     bookmakers = data.get("bookmakers", []) if isinstance(data, dict) else []
     if not bookmakers:
@@ -321,6 +352,11 @@ def extract_player_props(data: dict, home_abbr: str, away_abbr: str, total_match
                 log(f"    ⚠️ {player}: tim {player_team} ne odgovara meču {away_abbr}@{home_abbr}")
         elif log:
             log(f"    ⚠️ {player}: nije pronađen u bazi igrača")
+        if quotes_out is not None:
+            for q in qs:
+                quotes_out.append({"PLAYER": player, "PLAYER_TEAM": player_team or "", "OPP_TEAM": opp_team or "",
+                                   "BOOK": q["book"], "LINE": q["line"], "OVER_ODDS": q["over"],
+                                   "UNDER_ODDS": q["under"], "SNAPSHOT": snapshot})
         props.append({
             "PLAYER": player,
             "PLAYER_TEAM": player_team or "",
@@ -360,17 +396,21 @@ class FetchResult:
     paths: List[Path] = field(default_factory=list)
     events: int = 0
     events_skipped: int = 0  # mečevi drugog dana, preskočeni radi štednje API kvote
+    quotes_path: Optional[Path] = None  # sve kvote po kladionici (quotes_<datum>.csv / closing_quotes_<datum>.csv)
 
 
 def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optional[pd.DataFrame] = None,
                       client: Optional[OddsApiClient] = None, today: Optional[_dt.date] = None,
                       best_odds: bool = True, closing: bool = False, only_today: bool = True,
-                      game_date: Optional[_dt.date] = None) -> FetchResult:
+                      game_date: Optional[_dt.date] = None, now: Optional[_dt.datetime] = None) -> FetchResult:
     """Povuci današnju ponudu i snimi je u ``offer_latest.csv`` (+ kopije ``dnevna_ponuda.csv`` i datirana)
-    i detalje po kladionici u ``offer_books_<datum>.csv``.
+    i detalje po kladionici u ``offer_books_<datum>.csv``; sve kvote po kladionici idu u ``quotes_<datum>.csv``.
 
     ``best_odds``: najbolja kvota među kladionicama sa istom linijom. ``closing``: snimak zatvorenih linija
-    (pred početak mečeva) ide SAMO u ``closing_<datum>.csv`` (za CLV u evaluaciji); ponuda se ne dira.
+    (pred početak mečeva) ide SAMO u ``closing_<datum>.csv`` i ``closing_quotes_<datum>.csv`` (za CLV u evaluaciji);
+    ponuda se ne dira. Datum u imenu je američki datum mečeva (snimak u 00:45 po našem vremenu pripada
+    prethodnom danu), uzimaju se samo mečevi koji još nisu počeli, a novi snimak zamjenjuje samo redove
+    igrača koje je ponovo povukao (vidi ``merge_snapshot``).
     ``only_today``: kvote se traže samo za mečeve današnjeg američkog dana (``game_date``); The Odds API
     u listi vraća i sutrašnje mečeve, a svaki poziv za kvote troši mjesečnu kvotu. Za meč bez player props
     ponude ne poziva se ni linija ukupnih poena.
@@ -389,8 +429,8 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
         if not events:
             return FetchResult(False, pd.DataFrame(), "Nema utakmica u ponudi.")
         skipped: List[dict] = []
+        gd = game_date or current_game_date(now)
         if only_today:
-            gd = game_date or current_game_date()
             events, skipped = select_events_for_game_date(events, gd)
             log(f"📅 Utakmica u ponudi: {len(events) + len(skipped)}, današnjih (US datum {gd.isoformat()}): {len(events)}"
                 + (f" — {len(skipped)} drugog dana preskočeno radi štednje API kvote" if skipped else ""))
@@ -400,28 +440,38 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
                                    events_skipped=len(skipped))
         else:
             log(f"📅 Utakmica u ponudi: {len(events)}")
+        if closing:
+            events, started = select_unstarted_events(events, now)
+            log(f"⏱️ Zatvorene linije: mečeva koji još nisu počeli {len(events)}, već počelo {len(started)} (preskočeno).")
+            if not events:
+                return FetchResult(False, pd.DataFrame(), "Svi mečevi su već počeli — nema šta da se snimi kao zatvorena linija.",
+                                   events_skipped=len(skipped))
 
         totals_bulk: Optional[Dict[str, float]] = None
-        try:
-            totals_bulk = client.fetch_all_totals()
-        except OddsApiError:
-            raise
-        except Exception as e:  # noqa: BLE001 — rezerva: total po meču
-            log(f"⚠️ Totali jednim pozivom nisu uspjeli ({e}); uzimam po meču.")
+        if not closing:   # total meča treba samo ponudi; zatvorene linije štede te zahtjeve
+            try:
+                totals_bulk = client.fetch_all_totals()
+            except OddsApiError:
+                raise
+            except Exception as e:  # noqa: BLE001 — rezerva: total po meču
+                log(f"⚠️ Totali jednim pozivom nisu uspjeli ({e}); uzimam po meču.")
 
+        snapshot = (now or _dt.datetime.now()).replace(microsecond=0).isoformat()
         all_props: List[dict] = []
+        all_quotes: List[dict] = []
         for event in events:
             event_id = event.get("id")
             home_abbr = team_name_to_abbr(event.get("home_team", ""))
             away_abbr = team_name_to_abbr(event.get("away_team", ""))
             data = client.fetch_event_player_points(event_id)
             total_match = None
-            if event_has_player_points(data):
+            if not closing and event_has_player_points(data):
                 total_match = (totals_bulk or {}).get(event_id)
                 if total_match is None:
                     total_match = client.fetch_game_totals(event_id)
             props = extract_player_props(data, home_abbr, away_abbr, total_match, players_df,
-                                         settings.bookmaker_priority, log=log, best_odds=best_odds)
+                                         settings.bookmaker_priority, log=log, best_odds=best_odds,
+                                         quotes_out=all_quotes, snapshot=snapshot)
             log(f"🏀 {away_abbr} @ {home_abbr}: total={total_match}, igrača={len(props)}"
                 + ("" if props else " (nema player props linija — total nije ni tražen)"))
             all_props.extend(props)
@@ -432,12 +482,17 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
 
         df = props_to_frame(all_props)
         df_detail = props_to_frame(all_props, detail=True)
+        df_quotes = pd.DataFrame(all_quotes, columns=QUOTES_COLUMNS)
         settings.data_dir.mkdir(parents=True, exist_ok=True)
-        today_iso = (today or _dt.date.today()).isoformat()
+        quotes_path: Optional[Path] = None
         if closing:
+            today_iso = (today or gd).isoformat()   # američki datum mečeva, ne lokalni datum u 00:45
             paths = [settings.data_dir / f"closing_{today_iso}.csv"]
-            df_detail.to_csv(paths[0], index=False)
+            merge_snapshot(paths[0], df_detail).to_csv(paths[0], index=False)
+            quotes_path = settings.data_dir / f"closing_quotes_{today_iso}.csv"
+            merge_snapshot(quotes_path, df_quotes).to_csv(quotes_path, index=False)
         else:
+            today_iso = (today or _dt.date.today()).isoformat()
             paths = [settings.offer_latest_path(),
                      settings.data_dir / "dnevna_ponuda.csv",
                      settings.data_dir / f"offer_{today_iso}.csv"]
@@ -446,6 +501,8 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
             detail_path = settings.data_dir / f"offer_books_{today_iso}.csv"
             df_detail.to_csv(detail_path, index=False)
             paths.append(detail_path)
+            quotes_path = settings.data_dir / f"quotes_{today_iso}.csv"
+            df_quotes.to_csv(quotes_path, index=False)
         opp_filled = int((df["OPP_TEAM"].astype(str) != "").sum())
         msg = f"OK: {len(df)} props, OPP_TEAM popunjen {opp_filled}/{len(df)}"
         if "N_BOOKS" in df_detail.columns and len(df_detail):
@@ -460,7 +517,8 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
             if warn:
                 log("⚠️ " + warn)
         log("✅ " + msg)
-        return FetchResult(True, df, msg, paths, events=len(events), events_skipped=len(skipped))
+        return FetchResult(True, df, msg, paths, events=len(events), events_skipped=len(skipped),
+                           quotes_path=quotes_path)
     except OddsApiError as e:
         return FetchResult(False, pd.DataFrame(), str(e))
     except Exception as e:

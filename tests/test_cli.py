@@ -50,3 +50,13 @@ def test_cli_fetch_offer_without_key_fails_cleanly(tmp_path):
     r_global = _run("--data-dir", str(tmp_path), "--env-file", str(tmp_path / "no.env"), "check", ODDS_API_KEY="")
     assert r_global.returncode == 0 and "❌ nema" in r_global.stdout
     assert r.returncode == 1 and "ODDS_API_KEY" in r.stdout
+
+
+def test_cli_v2_report_on_empty_history_and_help(tmp_path):
+    r = _run("v2", "--data-dir", str(tmp_path), "--env-file", str(tmp_path / "no.env"),
+             "--history-dir", str(tmp_path / "h"))
+    assert r.returncode == 0 and "Još nema poravnatih v2 dana" in r.stdout and "Pregledi unaprijed" in r.stdout
+    assert "500 izbora" in r.stdout and "2000 izbora" in r.stdout
+    assert "v2" in _run("--help").stdout
+    sch = _run("schedule", "--help")
+    assert "--install-closing" in sch.stdout and "--remove-closing" in sch.stdout

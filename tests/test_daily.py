@@ -172,3 +172,39 @@ def test_stage_analyze_skips_old_offer(tmp_path, monkeypatch):
     msg = stage_analyze(s, log=lambda m: None)
     assert msg.startswith("SKIP") and "stara" in msg
     assert stage_analyze(_settings(tmp_path / "prazno"), log=lambda m: None).startswith("SKIP: nema fajla")
+
+
+class _Ns:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+def test_v2_failure_never_breaks_v1_analysis(tmp_path, monkeypatch):
+    from nba_engine import daily, v2
+    s = _settings(tmp_path)
+    lines = []
+    bundle, options = _Ns(league_pts_std=6.0), _Ns(mc_sims=100, seed=1)
+    result = _Ns(projections=None)
+
+    def boom(*a, **k):
+        raise RuntimeError("v2 puklo")
+
+    monkeypatch.setattr(v2, "run_v2", boom)
+    msg = daily._v2_after_analysis(result, bundle, options, s, lines.append)
+    assert "v2 nije uspio" in msg and "v2 puklo" in msg and any("v2 nije uspio" in l for l in lines)
+    monkeypatch.setattr(v2, "run_v2", lambda *a, **k: _Ns(message="v2: 3 igrača, izbora 1"))
+    assert daily._v2_after_analysis(result, bundle, options, s, lines.append) == " | v2: 3 igrača, izbora 1"
+
+
+def test_stage_settle_reports_v2_and_isolates_its_errors(tmp_path, monkeypatch):
+    from nba_engine import daily, v2_eval
+    s = _settings(tmp_path)
+    monkeypatch.setattr(v2_eval, "settle_v2", lambda settings, provider=None, log=None: "v2: poravnato izbora 2")
+    assert "| v2: poravnato izbora 2" in daily.stage_settle(s, lambda m: None)
+
+    def boom(*a, **k):
+        raise RuntimeError("game log nedostupan")
+
+    monkeypatch.setattr(v2_eval, "settle_v2", boom)
+    msg = daily.stage_settle(s, lambda m: None)
+    assert "v2 poravnanje nije uspjelo" in msg and "game log nedostupan" in msg

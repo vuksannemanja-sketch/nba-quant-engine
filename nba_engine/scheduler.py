@@ -18,6 +18,10 @@ from typing import Callable, Dict, List, Optional, Sequence
 from .config import PROJECT_ROOT
 
 LABEL = "com.nba-engine.daily"
+CLOSING_LABEL = "com.nba-engine.closing"
+# Zatvorene linije (za CLV): prvi snimak ~15 min prije prvih mečeva (19:00 ET = 01:00 po našem), drugi za kasnije mečeve.
+# Novi snimak mijenja samo igrače čiji mečevi još nisu počeli (vidi odds_api.merge_snapshot).
+CLOSING_TIMES = ((0, 45), (3, 30))
 # 22:30 po srednjoevropskom = 16:30 u Americi: popodnevni izvještaj o povredama (13:00 ET) je vani, linije su slegle,
 # a prvi večernji mečevi počinju tek u 01:00. Vikend-mečevi koji počnu ranije se tog dana preskaču (u toku su).
 DEFAULT_HOUR = 22
@@ -159,3 +163,91 @@ def status_lines(info: Dict[str, object]) -> List[str]:
     else:
         lines.append("⚠️  Plist postoji, ali posao nije registrovan kod launchd — pokreni --install ponovo")
     return lines
+
+
+# ---------------------------------------------------------------------------
+# Zatvorene linije (posebna launchd usluga: fetch-offer --closing u 00:45 i 03:30)
+# ---------------------------------------------------------------------------
+
+def closing_plist_path(home: Optional[Path] = None) -> Path:
+    return launch_agents_dir(home) / f"{CLOSING_LABEL}.plist"
+
+
+def render_closing_plist(python_exe: Path, project_root: Path, times: Sequence[Sequence[int]] = CLOSING_TIMES,
+                         log_dir: Optional[Path] = None) -> bytes:
+    for hh, mm in times:
+        if not 0 <= hh <= 23 or not 0 <= mm <= 59:
+            raise ValueError("sat mora biti 0–23, minut 0–59")
+    log_dir = Path(log_dir or Path(project_root) / "logs")
+    data = {
+        "Label": CLOSING_LABEL,
+        "ProgramArguments": [str(python_exe), "-m", "nba_engine", "fetch-offer", "--closing"],
+        "WorkingDirectory": str(project_root),
+        "StartCalendarInterval": [{"Hour": int(hh), "Minute": int(mm)} for hh, mm in times],
+        "StandardOutPath": str(log_dir / "closing.out.log"),
+        "StandardErrorPath": str(log_dir / "closing.err.log"),
+        "EnvironmentVariables": {"PATH": LAUNCHD_PATH, "LANG": "en_US.UTF-8", "PYTHONUNBUFFERED": "1"},
+        "RunAtLoad": False,
+    }
+    return plistlib.dumps(data, sort_keys=False)
+
+
+def install_closing(times: Sequence[Sequence[int]] = CLOSING_TIMES, python_exe: Optional[Path] = None,
+                    project_root: Optional[Path] = None, home: Optional[Path] = None, run=subprocess.run,
+                    log: Logger = print, platform: Optional[str] = None) -> Path:
+    """Upiši plist za snimanje zatvorenih linija i registruj ga kod launchd-a (zamjenjuje postojeći)."""
+    platform = platform or sys.platform
+    if platform != "darwin":
+        raise RuntimeError("launchd postoji samo na macOS-u; na Linuxu dodaj u crontab: "
+                           + "; ".join(f"{mm} {hh} * * * cd {project_root or PROJECT_ROOT} && "
+                                       f"{python_exe or sys.executable} -m nba_engine fetch-offer --closing"
+                                       for hh, mm in times))
+    python_exe = Path(python_exe or sys.executable)     # bez .resolve(): .venv/bin/python je simbolički link
+    project_root = Path(project_root or PROJECT_ROOT).resolve()
+    (project_root / "logs").mkdir(parents=True, exist_ok=True)
+    path = closing_plist_path(home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(render_closing_plist(python_exe, project_root, times, project_root / "logs"))
+    log(f"📝 Upisano: {path}")
+    _launchctl(["bootout", f"{domain()}/{CLOSING_LABEL}"], run)
+    res = _launchctl(["bootstrap", domain(), str(path)], run)
+    if res.returncode != 0:
+        raise RuntimeError(f"launchctl bootstrap nije uspio: {res.stderr.strip() or res.stdout.strip()}")
+    _launchctl(["enable", f"{domain()}/{CLOSING_LABEL}"], run)
+    log("✅ Snimanje zatvorenih linija registrovano: " + ", ".join(f"{hh:02d}:{mm:02d}" for hh, mm in times))
+    return path
+
+
+def remove_closing(home: Optional[Path] = None, run=subprocess.run, log: Logger = print) -> bool:
+    path = closing_plist_path(home)
+    existed = path.exists()
+    _launchctl(["bootout", f"{domain()}/{CLOSING_LABEL}"], run)
+    if existed:
+        path.unlink()
+        log(f"🗑️  Obrisano: {path}")
+    log("✅ Snimanje zatvorenih linija više nije registrovano." if existed else "ℹ️  Nije ni bilo registrovano.")
+    return existed
+
+
+def closing_status(home: Optional[Path] = None, run=subprocess.run) -> Dict[str, object]:
+    path = closing_plist_path(home)
+    out: Dict[str, object] = {"plist": str(path), "installed": path.exists(), "loaded": False, "times": []}
+    if path.exists():
+        try:
+            cal = plistlib.loads(path.read_bytes()).get("StartCalendarInterval", [])
+            cal = [cal] if isinstance(cal, dict) else cal
+            out["times"] = [f"{int(c.get('Hour', 0)):02d}:{int(c.get('Minute', 0)):02d}" for c in cal]
+        except Exception:  # noqa: BLE001
+            pass
+    res = _launchctl(["print", f"{domain()}/{CLOSING_LABEL}"], run)
+    if res.returncode == 0:
+        out["loaded"] = True
+    return out
+
+
+def closing_status_lines(info: Dict[str, object]) -> List[str]:
+    if not info.get("installed"):
+        return ["❌ Snimanje zatvorenih linija NIJE podešeno (bez toga CLV ostaje prazan). "
+                "Pokreni: python -m nba_engine schedule --install-closing"]
+    state = "registrovano kod launchd" if info.get("loaded") else "plist postoji, ali nije registrovan — pokreni --install-closing"
+    return [f"⏱️ Zatvorene linije: {', '.join(info.get('times') or []) or '?'} ({state})"]
