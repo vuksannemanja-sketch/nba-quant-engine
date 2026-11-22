@@ -291,7 +291,8 @@ def test_closing_uses_game_date_only_unstarted_events_and_merges_snapshots(tmp_p
     r1 = fetch_daily_offer(settings, log=lambda s: None, players_df=_players(), client=OddsApiClient("key", http=first),
                            closing=True, now=now1)
     assert r1.ok and r1.paths[0].name == "closing_2026-11-22.csv" and r1.quotes_path.name == "closing_quotes_2026-11-22.csv"
-    assert ("/events/ev1/odds", "totals") not in first.calls                 # zatvorene linije ne troše totale
+    assert not any(m == "totals" for _, m in first.calls)                    # zatvorene linije ne troše nikakve totale
+    assert pd.read_csv(r1.quotes_path)["SNAPSHOT"].iloc[0] == "2026-11-22T23:50:00+00:00"   # uvijek UTC sa zonom
     # drugi snimak 02:50 UTC: ev1 je počeo (preskače se), ev2 nije → samo Tatumov red se zamjenjuje
     second = _FakeHttp({"/events": events, "/events/ev1/odds": pay1b, "/events/ev2/odds": pay2b})
     now2 = dt.datetime(2026, 11, 23, 2, 50, tzinfo=dt.timezone.utc)
@@ -301,9 +302,35 @@ def test_closing_uses_game_date_only_unstarted_events_and_merges_snapshots(tmp_p
     assert ("/events/ev1/odds", "player_points") not in second.calls
     closing = pd.read_csv(tmp_path / "closing_2026-11-22.csv").set_index("PLAYER")
     assert closing.loc["Cade Cunningham", "LINE"] == 27.5 and closing.loc["Jayson Tatum", "LINE"] == 29.5
-    # sve su počeli → jasna poruka, bez fajla
+    cq = pd.read_csv(tmp_path / "closing_quotes_2026-11-22.csv").set_index("PLAYER")
+    assert cq.loc["Cade Cunningham", "LINE"] == 27.5 and cq.loc["Jayson Tatum", "LINE"] == 29.5
+    # svi su počeli → nije greška (kraj večeri), samo se ništa ne snima i stari snimak ostaje
     now3 = dt.datetime(2026, 11, 23, 5, 0, tzinfo=dt.timezone.utc)
     r3 = fetch_daily_offer(settings, log=lambda s: None, players_df=_players(),
                            client=OddsApiClient("key", http=_FakeHttp({"/events": events})), closing=True, now=now3,
                            game_date=dt.date(2026, 11, 22))
-    assert not r3.ok and "već počeli" in r3.message
+    assert r3.ok and r3.df.empty and r3.paths == [] and "ne snimaju" in r3.message
+    assert pd.read_csv(tmp_path / "closing_2026-11-22.csv").shape[0] == 2
+
+
+def test_closing_ignores_games_more_than_four_hours_away(tmp_path, monkeypatch):
+    """Posao pokrenut tek po buđenju (npr. u 08:00 UTC) ne smije snimiti liniju od prije 15 h kao 'zatvorenu'."""
+    for k in ("ODDS_API_KEY", "NBA_SEASON", "ODDS_BOOKMAKERS", "NBA_DATA_DIR", "NBA_HISTORY_DIR"):
+        monkeypatch.delenv(k, raising=False)
+    from nba_engine.odds_api import select_unstarted_events
+    settings = Settings.load(data_dir=tmp_path, season="2025-26", env_file=tmp_path / "no.env")
+    events = [{"id": "ev1", "home_team": "Detroit Pistons", "away_team": "Oklahoma City Thunder",
+               "commence_time": "2026-11-23T23:10:00Z"}]
+    now = dt.datetime(2026, 11, 23, 8, 0, tzinfo=dt.timezone.utc)
+    kept, dropped = select_unstarted_events(events, now)
+    assert kept == [] and len(dropped) == 1
+    # naivno vrijeme važi kao UTC; unutar 4 h meč se zadržava; bez poznatog početka se zadržava
+    kept2, _ = select_unstarted_events(events, dt.datetime(2026, 11, 23, 20, 0))
+    assert len(kept2) == 1
+    assert len(select_unstarted_events([{"id": "x"}], now)[0]) == 1
+    assert select_unstarted_events(events, now, window_hours=None)[1] == []
+    http = _FakeHttp({"/events": events, "/events/ev1/odds": _event_payload([("pinnacle", [("Cade Cunningham", 27.5, 1.9, 1.85)])])})
+    res = fetch_daily_offer(settings, log=lambda s: None, players_df=_players(), client=OddsApiClient("key", http=http),
+                            closing=True, now=now, game_date=dt.date(2026, 11, 23))
+    assert res.ok and res.df.empty and not list(tmp_path.glob("closing_*.csv"))
+    assert ("/events/ev1/odds", "player_points") not in http.calls          # ni jedan poziv za kvote

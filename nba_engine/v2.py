@@ -109,6 +109,19 @@ def fair_from_quotes(q: pd.DataFrame, line: float, sharp: str = SHARP_BOOK,
     return Fair(None, "nedovoljno", **kw)
 
 
+def shift_p_over(p_over: float, from_line: float, to_line: float, sigma: Optional[float] = None) -> float:
+    """Fer P(Over) sa linije ``from_line`` preračunata na ``to_line`` (normalna aproksimacija sa izmjerenim rasponom
+    grupe granice): iz P(Over) se izvede očekivanje, pa se računa vjerovatnoća za drugu liniju."""
+    from statistics import NormalDist
+    if math.isclose(from_line, to_line):
+        return float(p_over)
+    sigma = sigma or DEFAULT_SIGMA[line_bucket(to_line)]
+    nd = NormalDist()
+    p = min(max(float(p_over), 1e-4), 1 - 1e-4)
+    mu = from_line + sigma * nd.inv_cdf(p)
+    return float(1.0 - nd.cdf((to_line - mu) / sigma))
+
+
 def load_quotes(path) -> Optional[pd.DataFrame]:
     """quotes_<datum>.csv / closing_quotes_<datum>.csv → tabela sa NAME_KEY; None ako fajla nema ili je neispravan."""
     path = Path(path)
@@ -213,7 +226,11 @@ def model_weight_from_env(default: float = 0.0) -> float:
 
 
 def _game_key(team: str, opp: str) -> str:
-    return "-".join(sorted([str(team), str(opp)]))
+    team = "" if pd.isna(team) else str(team)
+    opp = "" if pd.isna(opp) else str(opp)
+    if not opp:                      # protivnik nepoznat: ograničenje važi bar po timu
+        return team
+    return "-".join(sorted([team, opp]))
 
 
 def build_universe(mc: pd.DataFrame, quotes: Optional[pd.DataFrame], residual_model: ResidualModel,
@@ -225,7 +242,7 @@ def build_universe(mc: pd.DataFrame, quotes: Optional[pd.DataFrame], residual_mo
     V2 Model P(Over)%, V2 P(Over)%, V2 EV Over %, V2 EV Under %, V2 EV %, V2 Note, V2 Pick. Kolona ``Model Pick``
     je v2 izbor (OVER/UNDER/NO VALUE), pa ga poravnanje i ledger čitaju isto kao v1."""
     df = mc.copy().reset_index(drop=True)
-    df["V1 Pick"] = df["Model Pick"]
+    df["V1 Pick"] = df["Model Pick"]   # v1 Monte Carlo odluka prije v1 filtera (min EV, kazna koncentracije); samo za poređenje
     by_player: Dict[str, pd.DataFrame] = {}
     if quotes is not None and not quotes.empty:
         by_player = {k: g for k, g in quotes.groupby("NAME_KEY")}
@@ -244,7 +261,9 @@ def build_universe(mc: pd.DataFrame, quotes: Optional[pd.DataFrame], residual_mo
             over_odds, under_odds = fair.best_over, fair.best_under
         if fair.ok:
             p_fair = float(fair.p_over)
-            p = p_fair + model_weight * (p_model - p_fair)
+            p = p_fair
+            if model_weight > 0 and not math.isnan(p_model):     # težina 0 = model se uopšte ne koristi
+                p = p_fair + model_weight * (p_model - p_fair)
             p = float(min(max(p, PROB_CLAMP[0]), PROB_CLAMP[1]))
         else:
             p_fair, p = np.nan, np.nan
@@ -292,6 +311,10 @@ def build_universe(mc: pd.DataFrame, quotes: Optional[pd.DataFrame], residual_mo
         chosen.append(idx)
         if len(chosen) >= max_picks:
             break
+    not_chosen = eligible & ~df.index.isin(chosen)
+    df.loc[not_chosen, "V2 Note"] = "preko dnevnog ili utakmičnog ograničenja broja izbora"
+    below = df["V2 Side"].isin(["OVER", "UNDER"]) & ~suspect & (ev < min_ev)
+    df.loc[below, "V2 Note"] = "očekivana vrijednost ispod praga"
     df.loc[chosen, "V2 Pick"] = df.loc[chosen, "V2 Side"]
     df["V2 Rank"] = np.nan
     for rank, idx in enumerate(chosen, 1):

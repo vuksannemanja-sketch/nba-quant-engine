@@ -28,7 +28,7 @@ from .history import list_history
 from .settle import (ActualsProvider, cached_provider, find_actual, game_date_for, load_all_settled, load_ledger,
                      official_analyses, settle_history)
 from .utils import normalize_name
-from .v2 import FAIR_SOURCES_OK, ResidualModel, build_calibration, fair_from_quotes, load_quotes
+from .v2 import FAIR_SOURCES_OK, ResidualModel, build_calibration, fair_from_quotes, load_quotes, shift_p_over
 
 UNI_PREFIX = "universe_settled_"
 BENCH_NAME = "benchmarks.csv"
@@ -74,12 +74,19 @@ def strategy_sides(df: pd.DataFrame, key: str = "") -> Dict[str, pd.Series]:
 # ---------------------------------------------------------------------------
 
 def closing_fair_for(closing_quotes: Optional[pd.DataFrame], player: str, line: float):
-    """Fer vjerovatnoća Over na zatvaranju (iste linije kao naša) ili None."""
+    """Fer vjerovatnoća Over na zatvaranju za NAŠU liniju ili None. Kad se linija pomjerila, uzima se najbliža linija koja
+    ima pouzdanu fer cijenu i preračuna se na našu (``shift_p_over``): izbori sa pomjerenom linijom su najinformativniji."""
     if closing_quotes is None or closing_quotes.empty:
         return None
     g = closing_quotes[closing_quotes["NAME_KEY"] == normalize_name(player)]
-    f = fair_from_quotes(g, line)
-    return f.p_over if f.ok else None
+    if g.empty:
+        return None
+    lines = sorted({float(x) for x in pd.to_numeric(g["LINE"], errors="coerce").dropna()}, key=lambda l: abs(l - line))
+    for l in lines:
+        f = fair_from_quotes(g, l)
+        if f.ok:
+            return shift_p_over(float(f.p_over), l, line)
+    return None
 
 
 def settle_universe(analysis: pd.DataFrame, actuals: pd.DataFrame, game_date: _dt.date, key: str = "",
@@ -102,7 +109,7 @@ def settle_universe(analysis: pd.DataFrame, actuals: pd.DataFrame, game_date: _d
                "V1 P(Over)%": r.get("P(Over)%"), "V1 Pick": r.get("V1 Pick"), "V2 Pick": r.get("V2 Pick"),
                "Market P(Over)%": r.get("Market P(Over)%"), "V2 EV %": r.get("V2 EV %"),
                "Actual Points": pts, "Actual MIN": mins,
-               "Over Won": (1.0 if pts > line else 0.0) if not math.isnan(pts) else np.nan}
+               "Over Won": (np.nan if math.isnan(pts) or pts == line else (1.0 if pts > line else 0.0))}   # push se ne broji
         for s in STRATEGIES:
             side = sides[s].iloc[i]
             if side not in ("OVER", "UNDER"):
@@ -181,7 +188,12 @@ def settle_v2_universe(v2_dir, provider: Optional[ActualsProvider] = None, today
         if actuals.empty or not bool((actuals["GAME_DATE"] == gdate).any()):
             events.append({"Analysis": name, "status": "no_data", "detail": f"game log još nema mečeve za {gdate}"})
             continue
-        analysis = pd.read_csv(path)
+        try:
+            analysis = pd.read_csv(path)
+        except Exception as e:  # noqa: BLE001 — oštećena analiza ne smije zaustaviti poravnanje kasnijih dana
+            events.append({"Analysis": name, "status": "error", "detail": f"ne mogu pročitati analizu: {e}"})
+            say(f"❌ v2 {name}: ne mogu pročitati analizu ({e})")
+            continue
         cq = load_quotes(Path(closing_dir) / f"closing_quotes_{gdate.isoformat()}.csv") if closing_dir else None
         uni = settle_universe(analysis, actuals, gdate, key=gdate.isoformat(), closing_quotes=cq)
         uni.to_csv(v2_dir / f"{UNI_PREFIX}{name}", index=False)
@@ -343,22 +355,40 @@ def latest_v2_picks(settings) -> Tuple[Optional[str], pd.DataFrame, int]:
 # Kalibracija iz podataka i provjera unazad (hodajući prozor)
 # ---------------------------------------------------------------------------
 
+def _day_of(analysis_name: pd.Series) -> pd.Series:
+    return analysis_name.astype(str).str.extract(r"analysis_(\d{4}-\d{2}-\d{2})")[0]
+
+
 def calibrate_from_history(settings, extra_universe: bool = True) -> dict:
-    """Kalibracija ostataka iz poravnatih v1 izbora (i cijelog v2 spiska ako ga ima)."""
-    frames = [load_all_settled(settings.history_dir)]
+    """Kalibracija ostataka iz poravnatih v1 izbora; za dane koje pokriva cijeli v2 spisak uzima se spisak (nepristrasan,
+    svi igrači), a v1 izbori tih dana se ne broje dva puta."""
+    v1 = load_all_settled(settings.history_dir)
     src = "history/settled_*"
+    frames = []
+    uni = pd.DataFrame()
     if extra_universe and settings.v2_history_dir.is_dir():
-        u = load_universe_settled(settings.v2_history_dir)
-        if not u.empty and "Calibrated Projection" in u.columns:
-            frames.append(u)
-            src += " + history/v2/universe_settled_*"
-    allr = pd.concat([f for f in frames if not f.empty], ignore_index=True)
-    return build_calibration(allr, source=src)
+        uni = load_universe_settled(settings.v2_history_dir)
+        if not uni.empty and "Calibrated Projection" not in uni.columns:
+            uni = pd.DataFrame()
+    if not v1.empty:
+        if not uni.empty:
+            v1 = v1[~_day_of(v1["Analysis"]).isin(set(_day_of(uni["Analysis"])))]
+        frames.append(v1)
+    if not uni.empty:
+        frames.append(uni)
+        src += " + history/v2/universe_settled_*"
+    frames = [f for f in frames if not f.empty]
+    if not frames:
+        return {"version": 1, "built": pd.Timestamp.now().date().isoformat(), "n": 0, "source": src, "buckets": {}}
+    return build_calibration(pd.concat(frames, ignore_index=True), source=src)
 
 
 def walk_forward(settled: pd.DataFrame, min_train_days: int = 6, weights=(0.0, 0.25, 0.5, 1.0)) -> Dict:
     """Za svaki dan: kalibracija iz ranijih dana → vjerovatnoće za taj dan → mjera greške (Brier) naspram ishoda.
     Poredi: stara vjerovatnoća modela (v1), tržište (Market P iz v1), model sa ispravnim rasponom i mješavine."""
+    need = {"Bet Result", "Actual Points", "Calibrated Projection", "Line", "P(Over)%", "Market P(Over)%", "Analysis"}
+    if settled is None or settled.empty or not need <= set(settled.columns):
+        return {"days": 0}
     d = settled.copy()
     d = d[d["Bet Result"].isin(["WIN", "LOSS"])].copy()
     for c in ("Actual Points", "Calibrated Projection", "Line", "P(Over)%", "Market P(Over)%"):

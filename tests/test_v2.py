@@ -187,3 +187,46 @@ def test_run_v2_saves_full_universe_in_v2_history_and_does_not_touch_v1(tmp_path
     res2 = run_v2(proj, settings, log=lambda m: None, quotes_path=tmp_path / "data" / "nema.csv", save=False)
     assert res2.ok and (res2.universe["V2 Pick"] == "NO VALUE").all() and res2.path is None
     assert not run_v2(pd.DataFrame(), settings, log=lambda m: None).ok
+
+
+def _edge_quotes(names, odds=2.10):
+    rows = []
+    for n in names:
+        rows += [{"PLAYER": n, "BOOK": "pinnacle", "LINE": 20.5, "OVER_ODDS": 1.9, "UNDER_ODDS": 1.9},
+                 {"PLAYER": n, "BOOK": "fanduel", "LINE": 20.5, "OVER_ODDS": odds, "UNDER_ODDS": 1.7}]
+    q = pd.DataFrame(rows)
+    from nba_engine import utils
+    q["NAME_KEY"] = q["PLAYER"].map(utils.normalize_name)
+    return q
+
+
+def test_per_game_cap_binds_when_many_picks_come_from_one_game():
+    names = [f"G{i}" for i in range(6)]
+    mc = _mc([{"Player": n, "TEAM_ABBR": "AAA", "OPP_TEAM": "BBB"} for n in names])
+    uni = build_universe(mc, _edge_quotes(names), ResidualModel(), model_weight=0.0, max_picks=10, max_per_game=3)
+    assert (uni["V2 Pick"] == "OVER").sum() == 3                             # svih 6 ima ivicu, ali utakmica dozvoljava 3
+    capped = uni[uni["V2 Pick"] == "NO VALUE"]
+    assert len(capped) == 3 and capped["V2 Note"].str.contains("ograničenja").all()
+    # protivnik nepoznat: ograničenje ipak važi po timu
+    mc2 = _mc([{"Player": n, "TEAM_ABBR": "AAA", "OPP_TEAM": ""} for n in names])
+    uni2 = build_universe(mc2, _edge_quotes(names), ResidualModel(), model_weight=0.0, max_picks=10, max_per_game=3)
+    assert (uni2["V2 Pick"] == "OVER").sum() == 3
+
+
+def test_weight_zero_ignores_model_even_when_it_is_nan_and_notes_explain_skips():
+    mc = _mc([{"Player": "A", "Calibrated Projection": float("nan")}, {"Player": "B"}])
+    q = _edge_quotes(["A"], odds=1.91)                                       # A: EV < 1 %
+    q = pd.concat([q, _edge_quotes(["B"], odds=2.10)], ignore_index=True)
+    uni = build_universe(mc, q, ResidualModel(), model_weight=0.0).set_index("Player")
+    assert uni.loc["A", "V2 P(Over)%"] == pytest.approx(50.0) and uni.loc["A", "V2 Pick"] == "NO VALUE"
+    assert "ispod praga" in uni.loc["A", "V2 Note"] and uni.loc["B", "V2 Pick"] == "OVER" and uni.loc["B", "V2 Note"] == ""
+
+
+def test_shift_p_over_moves_fair_probability_with_the_line():
+    from nba_engine.v2 import shift_p_over
+    assert shift_p_over(0.55, 20.5, 20.5) == pytest.approx(0.55)
+    up = shift_p_over(0.50, 20.5, 21.5)                                      # naša linija viša → Over teže
+    down = shift_p_over(0.50, 20.5, 19.5)
+    assert up < 0.5 < down and up == pytest.approx(1 - down, abs=1e-9)
+    assert shift_p_over(0.5, 10.5, 11.5) < shift_p_over(0.5, 30.5, 31.5)     # pomak od 1 poena je veći za niske granice
+    assert 0 < shift_p_over(0.9999, 20.5, 30.5) < shift_p_over(0.9999, 20.5, 20.5)

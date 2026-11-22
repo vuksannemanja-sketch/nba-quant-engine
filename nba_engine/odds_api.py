@@ -80,21 +80,32 @@ def select_events_for_game_date(events: Sequence[dict], game_date: _dt.date) -> 
     return kept, skipped
 
 
-def select_unstarted_events(events: Sequence[dict], now: Optional[_dt.datetime] = None) -> Tuple[List[dict], List[dict]]:
-    """(još nisu počeli, počeli): za snimak zatvorenih linija; mečevi bez poznatog početka se zadržavaju."""
+CLOSING_WINDOW_HOURS = 4.0   # zatvorena linija se prihvata samo za mečeve koji počinju u naredna ~4 h
+
+
+def select_unstarted_events(events: Sequence[dict], now: Optional[_dt.datetime] = None,
+                            window_hours: Optional[float] = CLOSING_WINDOW_HOURS) -> Tuple[List[dict], List[dict]]:
+    """(zadržani, odbačeni) za snimak zatvorenih linija: zadržavaju se mečevi koji još nisu počeli i počinju u narednih
+    ``window_hours`` sati (linija snimljena 15 h prije početka nije zatvorena linija, npr. kad se posao pokrene
+    tek po buđenju računara). Mečevi bez poznatog početka se zadržavaju. ``now`` bez vremenske zone važi kao UTC."""
     now = now or _dt.datetime.now(_dt.timezone.utc)
     if now.tzinfo is None:
         now = now.replace(tzinfo=_dt.timezone.utc)
-    kept, started = [], []
+    kept, dropped = [], []
     for ev in events:
         ts = event_start_utc(ev)
-        (started if ts is not None and ts <= now else kept).append(ev)
-    return kept, started
+        if ts is None:
+            kept.append(ev)
+        elif ts <= now or (window_hours is not None and ts - now > _dt.timedelta(hours=window_hours)):
+            dropped.append(ev)
+        else:
+            kept.append(ev)
+    return kept, dropped
 
 
 def merge_snapshot(path: Path, new: pd.DataFrame, key: str = "PLAYER") -> pd.DataFrame:
     """Novi snimak zamjenjuje redove istih igrača u postojećem fajlu; igrači iz drugih mečeva ostaju.
-    Tako više snimaka u noći (npr. 00:45 i 03:30) daje za svakog igrača zadnju liniju prije početka njegovog meča."""
+    Tako više snimaka u noći (npr. 00:45, 01:45, 02:45 i 03:45) daje za svakog igrača zadnju liniju prije početka njegovog meča."""
     path = Path(path)
     if path.exists():
         try:
@@ -441,11 +452,12 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
         else:
             log(f"📅 Utakmica u ponudi: {len(events)}")
         if closing:
-            events, started = select_unstarted_events(events, now)
-            log(f"⏱️ Zatvorene linije: mečeva koji još nisu počeli {len(events)}, već počelo {len(started)} (preskočeno).")
-            if not events:
-                return FetchResult(False, pd.DataFrame(), "Svi mečevi su već počeli — nema šta da se snimi kao zatvorena linija.",
-                                   events_skipped=len(skipped))
+            events, dropped = select_unstarted_events(events, now)
+            log(f"⏱️ Zatvorene linije: mečeva koji počinju u narednih {CLOSING_WINDOW_HOURS:.0f} h {len(events)}, "
+                f"preskočeno (već počeli ili još daleko) {len(dropped)}.")
+            if not events:   # očekivano na kraju večeri: nema greške, samo nema šta da se snimi
+                return FetchResult(True, pd.DataFrame(), "Nema mečeva koji počinju u narednih "
+                                   f"{CLOSING_WINDOW_HOURS:.0f} h — zatvorene linije se ne snimaju.", events_skipped=len(skipped))
 
         totals_bulk: Optional[Dict[str, float]] = None
         if not closing:   # total meča treba samo ponudi; zatvorene linije štede te zahtjeve
@@ -456,7 +468,10 @@ def fetch_daily_offer(settings: Settings, log: Logger = print, players_df: Optio
             except Exception as e:  # noqa: BLE001 — rezerva: total po meču
                 log(f"⚠️ Totali jednim pozivom nisu uspjeli ({e}); uzimam po meču.")
 
-        snapshot = (now or _dt.datetime.now()).replace(microsecond=0).isoformat()
+        snap_ts = now or _dt.datetime.now(_dt.timezone.utc)
+        if snap_ts.tzinfo is None:
+            snap_ts = snap_ts.replace(tzinfo=_dt.timezone.utc)
+        snapshot = snap_ts.replace(microsecond=0).isoformat()   # uvijek UTC sa zonom
         all_props: List[dict] = []
         all_quotes: List[dict] = []
         for event in events:

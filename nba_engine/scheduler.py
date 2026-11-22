@@ -19,9 +19,10 @@ from .config import PROJECT_ROOT
 
 LABEL = "com.nba-engine.daily"
 CLOSING_LABEL = "com.nba-engine.closing"
-# Zatvorene linije (za CLV): prvi snimak ~15 min prije prvih mečeva (19:00 ET = 01:00 po našem), drugi za kasnije mečeve.
-# Novi snimak mijenja samo igrače čiji mečevi još nisu počeli (vidi odds_api.merge_snapshot).
-CLOSING_TIMES = ((0, 45), (3, 30))
+# Zatvorene linije (za CLV): mečevi počinju u 19:00–22:30 ET = 01:00–04:30 po našem, pa se snima svakih sat vremena,
+# 15 min prije punog sata, i svaki igrač dobija zadnju liniju prije svog meča. Novi snimak mijenja samo igrače čiji
+# mečevi još nisu počeli i počinju u narednih ~4 h (vidi odds_api.merge_snapshot i select_unstarted_events).
+CLOSING_TIMES = ((0, 45), (1, 45), (2, 45), (3, 45))
 # 22:30 po srednjoevropskom = 16:30 u Americi: popodnevni izvještaj o povredama (13:00 ET) je vani, linije su slegle,
 # a prvi večernji mečevi počinju tek u 01:00. Vikend-mečevi koji počnu ranije se tog dana preskaču (u toku su).
 DEFAULT_HOUR = 22
@@ -166,7 +167,7 @@ def status_lines(info: Dict[str, object]) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
-# Zatvorene linije (posebna launchd usluga: fetch-offer --closing u 00:45 i 03:30)
+# Zatvorene linije (posebna launchd usluga: fetch-offer --closing u 00:45, 01:45, 02:45 i 03:45)
 # ---------------------------------------------------------------------------
 
 def closing_plist_path(home: Optional[Path] = None) -> Path:

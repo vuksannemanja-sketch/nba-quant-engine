@@ -53,7 +53,9 @@ def test_strategy_sides_and_deterministic_random():
     assert sides["TRZISTE"].tolist() == ["OVER" if p >= 50 else "UNDER" for p in uni["V2 Fair P(Over)%"]]
     again = E.strategy_sides(uni, key="2026-11-10")["NASUMICNO"].tolist()
     assert again == sides["NASUMICNO"].tolist() and set(again) <= {"OVER", "UNDER"}
-    assert E.strategy_sides(uni, key="2026-11-11")["NASUMICNO"].tolist() != again or True   # drugi dan može biti drugačiji
+    many = pd.concat([uni] * 20, ignore_index=True)                           # na većem uzorku strana varira, ne zavisi od reda
+    r = E.strategy_sides(many, key="2026-11-10")["NASUMICNO"]
+    assert 0.3 < (r == "OVER").mean() < 0.7 and r.iloc[:3].tolist() == again
 
 
 def test_settle_universe_results_profit_and_clv():
@@ -70,6 +72,14 @@ def test_settle_universe_results_profit_and_clv():
     # CLV: fer na zatvaranju (Pinnacle 1.80/2.00) → P(Over)=0.5263; uzeli smo Over 2.10 → 2.10 × 0.5263 − 1 = +10.5 %
     assert s.loc["Alpha One", "CLV EV %"] == pytest.approx(10.53, abs=0.05)
     assert pd.isna(s.loc["Beta Two", "CLV EV %"])                                           # nema zatvorenih kvota
+    # UNDER izbor: Beta Under 2.10 (linija 10.5), zatvaranje Pinnacle 1.80/2.00 → P(Under) = 1 − 0.5263 = 0.4737 → 2.10 × 0.4737 − 1 = −0.5 %
+    cq2 = _quotes([("Beta Two", "pinnacle", 10.5, 1.80, 2.00)])
+    s2 = E.settle_universe(uni, actuals, dt.date(2026, 11, 10), key="2026-11-10", closing_quotes=cq2).set_index("Player")
+    assert s2.loc["Beta Two", "CLV EV %"] == pytest.approx(-0.53, abs=0.05)
+    # linija se pomjerila: OVER 20.5 uzet, zatvoreno na 21.5 sa fer 50 % → naša linija je niža, Over je vjerovatniji → CLV > 0
+    cq3 = _quotes([("Alpha One", "pinnacle", 21.5, 1.90, 1.90)])
+    s3 = E.settle_universe(uni, actuals, dt.date(2026, 11, 10), key="2026-11-10", closing_quotes=cq3).set_index("Player")
+    assert s3.loc["Alpha One", "CLV EV %"] > 8 and 50 < s3.loc["Alpha One", "Closing Fair P(Over)%"] < 65
     rows = E.benchmark_rows(s.reset_index(), "analysis_x.csv", dt.date(2026, 11, 10))
     v2 = {r["Strategy"]: r for r in rows}["V2"]
     assert (v2["Bets"], v2["Wins"], v2["Losses"]) == (2, 2, 0) and v2["Profit"] == pytest.approx(1.1 + 1.1, abs=1e-6)
@@ -99,6 +109,12 @@ def test_settle_v2_end_to_end_ledger_benchmarks_and_overview(tmp_path):
     assert len(E.load_benchmarks(v2dir)) == len(E.STRATEGIES)
     ledger = pd.read_csv(v2dir / "ledger.csv")
     assert ledger.iloc[0]["Avg CLV"] == pytest.approx(1.0)                                    # OVER 20.5, zatvoreno 21.5 → +1
+    # granični dan: analiza za danas se još ne poravnava (mečevi nisu završeni), čak i kad game log slučajno ima red
+    _universe().to_csv(v2dir / "analysis_2026-11-11_22-30-00_daily.csv", index=False)
+    edge = E.settle_v2_universe(v2dir, provider=lambda s: _actuals("2026-11-11", [("Alpha One", "AAA", "BBB", 20, 30)]),
+                                today=dt.date(2026, 11, 11))
+    assert [e["status"] for e in edge if e["Analysis"].startswith("analysis_2026-11-11")] == ["pending"]
+    (v2dir / "analysis_2026-11-11_22-30-00_daily.csv").unlink()
     ov = E.v2_overview(settings)
     comp = ov["comparison"].set_index("Pravilo")
     assert comp.loc["v2 izbori", "Izbora"] == 2 and comp.loc["v2 izbori", "Pogodaka"] == 1
@@ -167,3 +183,48 @@ def test_calibrate_from_history_uses_settled_files(tmp_path):
     df.to_csv(settings.history_dir / "settled_analysis_2026-11-01_22-30-00_daily.csv", index=False)
     cal = E.calibrate_from_history(settings)
     assert cal["n"] == 120 and "8-12.5" in cal["buckets"] and cal["source"].startswith("history/settled_")
+
+
+def test_corrupt_v2_analysis_does_not_block_later_days(tmp_path):
+    settings = _settings(tmp_path)
+    v2dir = settings.v2_history_dir
+    v2dir.mkdir(parents=True)
+    (v2dir / "analysis_2026-11-09_22-30-00_daily.csv").write_text("", encoding="utf-8")          # prazan fajl
+    _universe().to_csv(v2dir / "analysis_2026-11-10_22-30-00_daily.csv", index=False)
+    actuals = pd.concat([_actuals("2026-11-09", [("Alpha One", "AAA", "BBB", 20, 30)]),
+                         _actuals("2026-11-10", [("Alpha One", "AAA", "BBB", 25, 34)])], ignore_index=True)
+    ev = E.settle_v2_universe(v2dir, provider=lambda s: actuals, today=dt.date(2026, 11, 12))
+    status = {e["Analysis"][9:19]: e["status"] for e in ev}
+    assert status == {"2026-11-09": "error", "2026-11-10": "settled"}
+    assert (v2dir / "universe_settled_analysis_2026-11-10_22-30-00_daily.csv").exists()
+
+
+def test_push_is_not_counted_as_over_won():
+    uni = _universe()
+    actuals = _actuals("2026-11-10", [("Alpha One", "AAA", "BBB", 20.5, 30)])    # tačno na granici (nerealno, ali push)
+    s = E.settle_universe(uni, actuals, dt.date(2026, 11, 10)).set_index("Player")
+    assert pd.isna(s.loc["Alpha One", "Over Won"]) and s.loc["Alpha One", "V2 Result"] == "PUSH"
+
+
+def test_backtest_and_calibration_on_empty_history_do_not_crash(tmp_path):
+    assert E.walk_forward(pd.DataFrame()) == {"days": 0}
+    assert E.walk_forward(pd.DataFrame({"a": [1]})) == {"days": 0}
+    assert "Premalo dana" in E.render_walk_forward({"days": 0})
+    cal = E.calibrate_from_history(_settings(tmp_path))
+    assert cal["n"] == 0 and cal["buckets"] == {}
+
+
+def test_calibration_counts_a_day_once_when_universe_covers_it(tmp_path):
+    settings = _settings(tmp_path)
+    settings.history_dir.mkdir(parents=True)
+    settings.v2_history_dir.mkdir(parents=True)
+    rng = np.random.default_rng(1)
+
+    def frame(n, line=10.5):
+        return pd.DataFrame({"Line": line, "Calibrated Projection": 11.0, "Actual Points": rng.normal(11, 5, n).round(),
+                             "Bet Result": "WIN"})
+    frame(40).to_csv(settings.history_dir / "settled_analysis_2026-11-09_22-30-00_daily.csv", index=False)   # samo v1
+    frame(40).to_csv(settings.history_dir / "settled_analysis_2026-11-10_22-30-00_daily.csv", index=False)   # i v1 i v2
+    frame(100).to_csv(settings.v2_history_dir / "universe_settled_analysis_2026-11-10_22-31-00_daily.csv", index=False)
+    cal = E.calibrate_from_history(settings)
+    assert cal["n"] == 40 + 100 and "universe_settled" in cal["source"]

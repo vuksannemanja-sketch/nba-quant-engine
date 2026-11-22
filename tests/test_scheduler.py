@@ -73,12 +73,13 @@ def test_parse_launchctl_print():
     assert info == {"state": "waiting", "program": "/p/python", "last exit code": "1"}
 
 
-def test_closing_plist_has_two_times_and_fetch_closing_args():
+def test_closing_plist_has_hourly_times_and_fetch_closing_args():
     raw = scheduler.render_closing_plist(Path("/p/.venv/bin/python"), Path("/p"))
     data = plistlib.loads(raw)
     assert data["Label"] == "com.nba-engine.closing"
     assert data["ProgramArguments"] == ["/p/.venv/bin/python", "-m", "nba_engine", "fetch-offer", "--closing"]
-    assert data["StartCalendarInterval"] == [{"Hour": 0, "Minute": 45}, {"Hour": 3, "Minute": 30}]
+    assert data["StartCalendarInterval"] == [{"Hour": 0, "Minute": 45}, {"Hour": 1, "Minute": 45},
+                                             {"Hour": 2, "Minute": 45}, {"Hour": 3, "Minute": 45}]
     assert data["StandardOutPath"] == "/p/logs/closing.out.log" and data["RunAtLoad"] is False
     with pytest.raises(ValueError):
         scheduler.render_closing_plist(Path("/p/python"), Path("/p"), times=[(25, 0)])
@@ -96,8 +97,8 @@ def test_closing_install_status_remove_roundtrip(tmp_path):
     # dnevni posao ostaje netaknut (zasebna usluga)
     assert not (home / "Library" / "LaunchAgents" / "com.nba-engine.daily.plist").exists()
     info = scheduler.closing_status(home=home, run=lc)
-    assert info["installed"] and info["loaded"] and info["times"] == ["00:45", "03:30"]
-    assert "00:45, 03:30" in scheduler.closing_status_lines(info)[0]
+    assert info["installed"] and info["loaded"] and info["times"] == ["00:45", "01:45", "02:45", "03:45"]
+    assert "00:45, 01:45, 02:45, 03:45" in scheduler.closing_status_lines(info)[0]
     assert scheduler.remove_closing(home=home, run=lc, log=lambda m: None) is True and not path.exists()
     assert scheduler.remove_closing(home=home, run=lc, log=lambda m: None) is False
     info2 = scheduler.closing_status(home=home, run=_FakeLaunchctl(print_rc=113))

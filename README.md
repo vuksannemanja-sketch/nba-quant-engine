@@ -38,7 +38,7 @@ python -m nba_engine ui
 | `python -m nba_engine daily` | dnevni posao u jednom potezu: refresh → settle → fetch-offer → analyze → ai (uz `--push` i slanje podataka na GitHub) |
 | `python -m nba_engine ai` | AI izvještaj: Claude bira 10 najsigurnijih opklada iz današnje analize; `--report` ispisuje statistiku AI izbora |
 | `python -m nba_engine schedule --install` | podešava da se `daily` sam pokreće svaki dan na ovom računaru (macOS launchd); `--status`, `--remove` |
-| `python -m nba_engine schedule --install-closing` | podešava snimanje zatvorenih linija (00:45 i 03:30) za mjerenje CLV; `--remove-closing` |
+| `python -m nba_engine schedule --install-closing` | podešava snimanje zatvorenih linija (00:45, 01:45, 02:45 i 03:45) za mjerenje CLV; `--remove-closing` |
 | `python -m nba_engine v2` | v2 u sjeni: poređenje sa jednostavnim pravilima, starim modelom i AI izborima; `--settle`, `--calibrate`, `--backtest` |
 
 Korisne opcije: `analyze --offer PUTANJA --top 20 --min-ev 5 --only-positive --no-schedule`,
@@ -195,17 +195,22 @@ veze sa ishodom. v2 zato radi **uporedo** sa starim modelom, ne mijenja ga i pi�
 - **Dnevni posao**: v2 se računa odmah poslije v1 u fazi `analyze`, a poravnava u fazi `settle`. Greška v2 nikad
   ne ruši ni ne mijenja stari model.
 - **Sve kvote po kladionici** se od sada snimaju u `data/quotes_<datum>.csv` (bez dodatnih API zahtjeva).
-- **Zatvorene linije (CLV)**: `schedule --install-closing` podešava `fetch-offer --closing` u 00:45 i 03:30
+- **Zatvorene linije (CLV)**: `schedule --install-closing` podešava `fetch-offer --closing` u 00:45, 01:45, 02:45 i 03:45
   (posebna launchd usluga). Snimak se imenuje po američkom datumu mečeva, uzima samo mečeve koji još nisu počeli i
-  mijenja samo redove igrača koje je ponovo povukao, pa svaki igrač dobija zadnju liniju prije svog meča
-  (`data/closing_<datum>.csv` i `data/closing_quotes_<datum>.csv`). Trošak oko 30 API zahtjeva dnevno.
+  počinju u narednih ~4 h (stara linija snimljena pri kasnom pokretanju se ne prihvata) i mijenja samo redove igrača
+  koje je ponovo povukao, pa svaki igrač dobija zadnju liniju prije svog meča (`data/closing_<datum>.csv` i
+  `data/closing_quotes_<datum>.csv`). Trošak oko 60 API zahtjeva dnevno. Kad se linija pomjerila, CLV se računa
+  pomjeranjem fer vjerovatnoće na našu liniju (normalna aproksimacija sa izmjerenim rasponom).
 - **Pregledi unaprijed**: prvi na 500 izbora sa zatvorenom linijom (CLV), drugi na 2.000 izbora (pogodak i ROI).
   Prije toga se ne tvrdi da prednost postoji.
 - **Provjera unazad**: `python -m nba_engine v2 --backtest` svaki dan uči kalibraciju samo iz ranijih dana i mjeri
   grešku vjerovatnoće na neviđenom danu (stari model, tržište, model sa ispravnim rasponom, mješavine).
   Na 20 dana: tržište 0,2491, bacanje novčića 0,2500, stari model 0,2615, model sa ispravnim rasponom 0,2586.
 
-Ograničenje: ponuda (Pinnacle i američke kladionice) nije odigriva u Austriji, pa je ROI u v2 „na papiru“.
+`v2 --calibrate` prepisuje praćeni fajl `nba_engine/v2_calibration.json`; dok se ne commit-uje, slanje podataka na GitHub
+se preskače (zaštita od izmjena koda). Commit ide kroz PR.
+
+Ograničenje: ponuda (Pinnacle i američke kladionice) ne mora biti dostupna kladionicama koje igrač stvarno koristi, pa je ROI u v2 „na papiru“.
 
 ## Ulazi modela iz grupe B (uključeni, mogu se isključiti)
 

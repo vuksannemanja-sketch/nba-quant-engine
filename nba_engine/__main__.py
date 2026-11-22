@@ -436,7 +436,7 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--remove", action="store_true", help="ukloni dnevni posao")
     g.add_argument("--status", action="store_true", help="prikaži stanje (podrazumijevano)")
     g.add_argument("--install-closing", action="store_true",
-                   help="podesi snimanje zatvorenih linija (00:45 i 03:30) za mjerenje CLV")
+                   help="podesi snimanje zatvorenih linija (00:45, 01:45, 02:45 i 03:45) za mjerenje CLV")
     g.add_argument("--remove-closing", action="store_true", help="ukloni snimanje zatvorenih linija")
     g.add_argument("--show", action="store_true", help="samo ispiši plist i cron liniju, ništa ne mijenjaj")
     s.add_argument("--hour", type=int, default=22, help="sat pokretanja, 0–23 (podrazumijevano 22)")
