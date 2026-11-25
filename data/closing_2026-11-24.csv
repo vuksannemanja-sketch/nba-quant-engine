@@ -1,0 +1,43 @@
+PLAYER,PLAYER_TEAM,LINE,OVER_ODDS,UNDER_ODDS,OPP_TEAM,TOTAL_MATCH,BOOKMAKER,OVER_BOOK,UNDER_BOOK,N_BOOKS,N_BOOKS_SAME_LINE
+Cade Cunningham,DET,24.5,1.89,1.85,ORL,,pinnacle,pinnacle,pinnacle,1,1
+Franz Wagner,ORL,22.5,1.8,2.13,DET,,pinnacle,betrivers,pinnacle,9,2
+Desmond Bane,ORL,17.5,2.08,1.87,DET,,pinnacle,pinnacle,betrivers,9,8
+Daniss Jenkins,DET,15.5,1.97,1.78,ORL,,pinnacle,pinnacle,pinnacle,8,1
+Anthony Black,ORL,14.5,1.99,1.84,DET,,pinnacle,pinnacle,draftkings,9,8
+Jalen Suggs,ORL,11.5,2.02,1.82,DET,,pinnacle,fanduel,draftkings,8,6
+Kevin Huerter,DET,11.5,1.93,1.81,ORL,,pinnacle,pinnacle,pinnacle,3,1
+John Collins,DET,10.5,1.93,1.81,ORL,,pinnacle,pinnacle,pinnacle,1,1
+Isaiah Joe,DET,10.5,1.72,2.05,ORL,,pinnacle,pinnacle,pinnacle,2,1
+Tristan da Silva,ORL,10.5,1.96,1.89,DET,,pinnacle,fanduel,pinnacle,8,7
+Wendell Carter Jr,ORL,10.5,1.87,2.0,DET,,pinnacle,betmgm,draftkings,8,7
+Ausar Thompson,DET,10.5,1.88,1.85,ORL,,pinnacle,pinnacle,pinnacle,7,1
+Paul Reed Jr,DET,9.5,1.82,1.93,ORL,,pinnacle,pinnacle,pinnacle,1,1
+Goga Bitadze,ORL,4.5,2.0,1.77,DET,,betonlineag,betonlineag,betonlineag,1,1
+Jayson Tatum,BOS,26.5,1.98,1.77,WAS,,pinnacle,pinnacle,pinnacle,9,1
+Anthony Davis,WAS,21.5,2.0,1.89,BOS,,pinnacle,circasports,betrivers,9,4
+Paul George,BOS,18.5,1.91,2.0,WAS,,pinnacle,betmgm,circasports,9,8
+AJ Dybantsa,WAS,16.5,2.16,1.65,BOS,,pinnacle,pinnacle,pinnacle,9,1
+Trae Young,WAS,15.5,2.5,1.62,BOS,,pinnacle,circasports,pinnacle,9,2
+Kyshawn George,WAS,14.5,1.93,2.0,BOS,,pinnacle,draftkings,circasports,9,6
+Derrick White,BOS,13.5,2.15,1.88,WAS,,pinnacle,circasports,betrivers,9,6
+Payton Pritchard,BOS,12.5,1.83,2.08,WAS,,pinnacle,betmgm,pinnacle,10,4
+Neemias Queta,BOS,10.5,1.82,2.0,WAS,,pinnacle,fanduel,pinnacle,8,5
+Alex Sarr,WAS,9.5,2.0,1.83,BOS,,pinnacle,betonlineag,draftkings,8,5
+Sam Hauser,BOS,8.5,2.65,1.82,WAS,,fanduel,bovada,fanduel,6,3
+Khris Middleton,WAS,6.5,2.35,1.54,BOS,,betmgm,betmgm,betmgm,2,1
+Bilal Coulibaly,WAS,6.5,1.99,1.88,BOS,,pinnacle,draftkings,betrivers,8,7
+Hugo Gonzalez,BOS,5.5,2.0,1.82,WAS,,draftkings,betonlineag,draftkings,4,3
+Nikola Jokic,DEN,25.5,2.0,1.92,DAL,,pinnacle,circasports,betrivers,9,7
+Cooper Flagg,DAL,23.5,1.85,1.96,DEN,,pinnacle,draftkings,fanduel,9,4
+Jamal Murray,DEN,22.5,1.86,2.0,DAL,,pinnacle,pinnacle,betmgm,9,5
+Kyrie Irving,DAL,22.5,2.0,1.91,DEN,,pinnacle,circasports,pinnacle,9,8
+Aaron Gordon,DEN,13.5,1.96,1.94,DAL,,pinnacle,draftkings,betrivers,9,8
+Cameron Johnson,DEN,12.5,1.88,1.96,DAL,,pinnacle,fanduel,pinnacle,8,6
+Christian Braun,DEN,12.5,1.82,2.0,DAL,,pinnacle,draftkings,pinnacle,8,6
+P.J. Washington,DAL,11.5,2.0,1.88,DEN,,fanduel,betonlineag,draftkings,8,5
+DeMar DeRozan,DEN,10.5,2.0,1.91,DAL,,pinnacle,circasports,betmgm,10,9
+Naji Marshall,DAL,10.5,2.17,1.77,DEN,,pinnacle,pinnacle,circasports,9,2
+Daniel Gafford,DAL,9.5,1.98,1.85,DEN,,pinnacle,fanduel,draftkings,8,7
+Zaccharie Risacher,DAL,7.5,1.88,2.0,DEN,,fanduel,betonlineag,draftkings,6,5
+Caleb Martin,DAL,5.5,2.02,1.91,DEN,,fanduel,fanduel,betmgm,7,6
+Morez Johnson Jr.,DAL,5.5,1.96,1.93,DEN,,fanduel,fanduel,betrivers,6,5
