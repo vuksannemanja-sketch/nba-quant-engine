@@ -1,0 +1,55 @@
+PLAYER,PLAYER_TEAM,LINE,OVER_ODDS,UNDER_ODDS,OPP_TEAM,TOTAL_MATCH,BOOKMAKER,OVER_BOOK,UNDER_BOOK,N_BOOKS,N_BOOKS_SAME_LINE
+Shai Gilgeous-Alexander,OKC,32.5,1.91,1.88,MIL,,pinnacle,fanduel,draftkings,5,5
+Tyrese Maxey,PHI,27.5,1.93,1.88,HOU,219.5,fanduel,draftkings,fanduel,3,3
+Franz Wagner,ORL,25.5,1.97,1.81,WAS,218.5,pinnacle,betonlineag,betrivers,6,5
+Anthony Davis,WAS,23.5,1.97,1.83,ORL,218.5,pinnacle,betonlineag,betrivers,6,4
+Tyler Herro,MIL,21.5,1.93,1.88,OKC,,pinnacle,fanduel,pinnacle,5,5
+Alperen Sengun,HOU,21.5,2.0,1.76,PHI,219.5,fanduel,fanduel,fanduel,3,1
+Brandon Miller,CHA,21.5,1.95,1.88,BKN,213.5,fanduel,draftkings,fanduel,4,4
+Kevin Durant,HOU,20.5,1.91,1.91,PHI,219.5,fanduel,fanduel,draftkings,3,3
+Desmond Bane,ORL,19.5,1.96,1.93,WAS,218.5,pinnacle,draftkings,pinnacle,6,6
+Julius Randle,BKN,19.5,1.85,1.98,CHA,213.5,fanduel,draftkings,fanduel,4,4
+Naz Reid,CHA,19.5,1.92,1.88,BKN,213.5,fanduel,draftkings,fanduel,4,4
+Michael Porter Jr,BKN,18.5,1.91,1.91,CHA,213.5,fanduel,fanduel,draftkings,4,4
+Matas Buzelis,CHI,18.5,1.91,1.89,IND,235.5,pinnacle,betonlineag,draftkings,6,6
+VJ Edgecombe,PHI,17.5,2.0,1.76,HOU,219.5,fanduel,fanduel,fanduel,3,1
+Ajay Mitchell,OKC,17.5,1.75,2.02,MIL,,pinnacle,pinnacle,pinnacle,5,1
+Coby White,CHA,17.5,1.93,1.89,BKN,213.5,fanduel,draftkings,fanduel,4,4
+AJ Dybantsa,WAS,17.5,1.9,1.91,ORL,218.5,pinnacle,betonlineag,betrivers,6,6
+Amen Thompson,HOU,15.5,1.88,1.94,PHI,219.5,fanduel,williamhill_us,fanduel,3,2
+Jalen Smith,CHI,15.5,1.96,1.98,IND,235.5,pinnacle,draftkings,pinnacle,5,5
+Trae Young,WAS,15.5,1.98,1.81,ORL,218.5,pinnacle,draftkings,williamhill_us,6,6
+Kyshawn George,WAS,15.5,1.96,1.93,ORL,218.5,pinnacle,draftkings,pinnacle,6,6
+Anthony Black,ORL,14.5,1.91,1.88,WAS,218.5,pinnacle,betonlineag,pinnacle,6,5
+Buddy Hield,CHI,14.5,2.04,1.82,IND,235.5,pinnacle,pinnacle,draftkings,5,5
+Jared McCain,OKC,14.5,1.81,1.98,MIL,,pinnacle,betonlineag,pinnacle,5,4
+Anfernee Simons,PHI,14.5,1.82,1.94,HOU,219.5,fanduel,fanduel,fanduel,2,2
+Fred VanVleet,HOU,13.5,1.98,1.77,PHI,219.5,fanduel,fanduel,fanduel,4,1
+Jaime Jaquez Jr,MIL,13.5,1.93,1.88,OKC,,fanduel,fanduel,draftkings,4,4
+Jabari Smith Jr,HOU,13.5,1.98,1.91,PHI,219.5,fanduel,draftkings,fanduel,3,3
+Grayson Allen,CHA,12.5,1.94,1.9,BKN,213.5,fanduel,fanduel,draftkings,4,4
+Kyle Kuzma,MIL,12.5,1.88,1.93,OKC,,pinnacle,pinnacle,draftkings,5,5
+Josh Giddey,CHI,12.5,1.78,2.02,IND,235.5,pinnacle,betonlineag,fanduel,5,3
+Tre Jones,CHI,11.5,1.89,1.98,IND,235.5,pinnacle,fanduel,draftkings,5,5
+Jalen Suggs,ORL,11.5,1.96,1.94,WAS,218.5,pinnacle,draftkings,fanduel,6,6
+Tristan da Silva,ORL,11.5,1.89,1.93,WAS,218.5,pinnacle,betrivers,draftkings,6,6
+Wendell Carter Jr,ORL,11.5,1.93,1.85,WAS,218.5,pinnacle,fanduel,pinnacle,6,5
+Isaac Okoro,CHI,11.5,1.95,1.98,IND,235.5,pinnacle,draftkings,pinnacle,5,5
+Moussa Diabate,CHA,10.5,2.02,1.84,BKN,213.5,fanduel,fanduel,draftkings,4,4
+Ryan Rollins,MIL,10.5,1.81,1.96,OKC,,fanduel,betonlineag,fanduel,4,2
+Tari Eason,HOU,9.5,2.04,1.77,PHI,219.5,fanduel,fanduel,williamhill_us,2,2
+Jabari Walker,PHI,9.5,1.98,1.79,HOU,219.5,fanduel,fanduel,williamhill_us,2,2
+Kenrich Williams,OKC,9.5,2.04,1.79,MIL,,pinnacle,pinnacle,draftkings,6,4
+Isaiah Hartenstein,OKC,9.5,1.89,1.91,MIL,,pinnacle,betonlineag,fanduel,5,5
+Bennett Stirtz,OKC,9.5,1.96,1.85,MIL,,pinnacle,draftkings,fanduel,5,5
+Alex Sarr,WAS,9.5,1.91,1.93,ORL,218.5,pinnacle,pinnacle,draftkings,7,7
+Myles Turner,MIL,8.5,1.82,2.0,OKC,,pinnacle,draftkings,pinnacle,5,5
+Nic Claxton,CHI,8.5,1.85,1.93,IND,235.5,pinnacle,draftkings,fanduel,5,5
+Kentavious Caldwell-Pope,PHI,7.5,1.76,2.0,HOU,219.5,fanduel,fanduel,fanduel,2,1
+Alex Caruso,OKC,7.5,1.81,1.96,MIL,,pinnacle,betonlineag,pinnacle,4,3
+Reed Sheppard,HOU,7.5,2.04,1.72,PHI,219.5,fanduel,fanduel,fanduel,2,1
+Danny Wolf,BKN,7.5,1.94,1.88,CHA,213.5,fanduel,betonlineag,fanduel,4,4
+Day'Ron Sharpe,BKN,7.5,1.74,2.02,CHA,213.5,fanduel,fanduel,fanduel,4,1
+Bilal Coulibaly,WAS,7.5,2.0,1.79,ORL,218.5,pinnacle,betonlineag,draftkings,6,5
+Marcus Smart,HOU,5.5,1.88,1.93,PHI,219.5,fanduel,fanduel,williamhill_us,2,2
+Sion James,CHA,5.5,1.95,1.86,BKN,213.5,fanduel,fanatics,draftkings,5,5
